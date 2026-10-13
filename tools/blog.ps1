@@ -20,7 +20,7 @@ switch ($Action) {
     if ([string]::IsNullOrWhiteSpace($postTitle)) { throw '标题不能为空。' }
     if ($postTitle.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) { throw '标题不能包含斜线、冒号等文件名特殊字符。' }
     if (Test-Path -LiteralPath "source/_posts/$postTitle.md") { throw '同名文章已经存在，请更换标题。' }
-    Invoke-Hexo @('new',$postTitle)
+    Invoke-Hexo @('new',$postTitle,'--path',$postTitle)
     Invoke-Item "source/_posts/$postTitle.md"
   }
   'build' { Invoke-Hexo @('generate') }

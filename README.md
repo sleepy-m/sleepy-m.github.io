@@ -12,12 +12,12 @@
 博客名称、作者和网址在 `_config.yml`，导航和主题在 `_config.next.yml`。
 示例文章可以直接修改或删除。
 
-## 首次上线
+## 网站与发布
 
-目标账号暂配置为本机已登录的 `sleepy-m`，网址为 https://sleepy-m.github.io 。
-创建公开仓库 `sleepy-m.github.io`，推送当前源码，在 Settings → Pages → Source 选择 GitHub Actions。
+已于 2026-10-13 发布到 https://sleepy-m.github.io/ ，仓库为 https://github.com/sleepy-m/sleepy-m.github.io 。
+账号使用本机已登录的 `sleepy-m`。GitHub Pages 已设置为 GitHub Actions 自动构建。
 `.github/workflows/pages.yml` 已配置自动构建发布，不需要手工上传 public。
-上线前确认账号以及示例文字，所有推送到公开仓库的文件均可被别人查看。
+所有推送到公开仓库的文件均可被别人查看。
 
 ## 换电脑
 
