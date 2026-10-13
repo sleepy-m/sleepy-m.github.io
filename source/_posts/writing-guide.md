@@ -1,15 +1,13 @@
 ---
-title: 写文章、放图片与发布
+title: 在线写作与发布指南
 published: true
-date: '2026-10-13'
+date: 2026-10-13
 categories:
   - 学习笔记
 tags:
   - Markdown
   - 使用说明
 ---
-
-
 现在可以直接在浏览器里写文章、放图片和发布。
 
 ## 登录在线编辑器
