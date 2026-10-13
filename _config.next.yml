@@ -1,0 +1,35 @@
+scheme: Mist
+vendors:
+  internal: local
+  plugins: local
+menu:
+  首页: / || fa fa-home
+  分类: /categories/ || fa fa-th
+  标签: /tags/ || fa fa-tags
+  归档: /archives/ || fa fa-archive
+  关于: /about/ || fa fa-user
+footer:
+  since: 2026
+  powered: false
+  theme:
+    enable: false
+local_search:
+  enable: true
+  trigger: auto
+  top_n_per_article: 3
+  unescape: false
+  preload: false
+font:
+  enable: false
+back2top:
+  enable: true
+  sidebar: false
+  scrollpercent: true
+motion:
+  enable: false
+codeblock:
+  copy_button:
+    enable: true
+toc:
+  enable: true
+  number: false
