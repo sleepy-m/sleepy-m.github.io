@@ -2,7 +2,7 @@ const fs=require('fs');
 const path=require('path');
 hexo.extend.generator.register('self-hosted-fluid-assets',function(){
   const result=[];
-  const packageRoot=name=>path.dirname(require.resolve(name+'/package.json'));
+  const packageRoot=name=>{try{return path.dirname(require.resolve(name+'/package.json'));}catch(error){if(error.code!=='ERR_PACKAGE_PATH_NOT_EXPORTED')throw error;let dir=path.dirname(require.resolve(name));while(!fs.existsSync(path.join(dir,'package.json'))){const parent=path.dirname(dir);if(parent===dir)throw error;dir=parent;}return dir;}};
   const file=(pkg,source,dest)=>result.push({path:dest,data:()=>fs.createReadStream(path.join(packageRoot(pkg),source))});
   function folder(pkg,source,dest){const base=path.join(packageRoot(pkg),source);for(const entry of fs.readdirSync(base,{withFileTypes:true})){const relative=path.posix.join(source,entry.name),output=path.posix.join(dest,entry.name);if(entry.isDirectory())folder(pkg,relative,output);else file(pkg,relative,output);}}
   function font(pkg,css,dest){file(pkg,css,dest+'/index.css');file(pkg,'LICENSE',dest+'/LICENSE.txt');const text=fs.readFileSync(path.join(packageRoot(pkg),css),'utf8');for(const match of text.matchAll(/url\(([^)]+)\)/g)){const name=match[1].replace(/["']/g,'').replace(/^\.\//,'');file(pkg,name,dest+'/'+name);}}
@@ -16,6 +16,10 @@ hexo.extend.generator.register('self-hosted-fluid-assets',function(){
   file('nprogress','nprogress.js','vendor/nprogress/nprogress.min.js');file('nprogress','nprogress.css','vendor/nprogress/nprogress.min.css');
   file('anchor-js','anchor.min.js','vendor/anchor/anchor.min.js');file('tocbot','dist/tocbot.min.js','vendor/tocbot/tocbot.min.js');file('tocbot','dist/tocbot.css','vendor/tocbot/tocbot.css');
   file('clipboard','dist/clipboard.min.js','vendor/clipboard/clipboard.min.js');folder('katex','dist','vendor/katex');
+  file('vditor','dist/index.min.js','vendor/vditor/dist/index.min.js');
+  file('vditor','dist/index.css','vendor/vditor/dist/index.css');
+  folder('vditor','dist/css','vendor/vditor/dist/css');
+  for(const name of ['i18n','icons','lute','katex','highlight.js'])folder('vditor','dist/js/'+name,'vendor/vditor/dist/js/'+name);
   return result;
 });
 hexo.extend.filter.register('after_render:html',html=>html.replace(/(?:https?:)?\/\/at\.alicdn\.com\/t\/c\/font_1749284_5i9bdhy70f8\.css/g,'/css/site-icons.css'));

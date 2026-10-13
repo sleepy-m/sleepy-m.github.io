@@ -2,6 +2,14 @@
 
 使用 Hexo + Fluid + GitHub Pages，主编辑方式为 Pages CMS 在线可视化后台。文章底层仍使用 Markdown。
 
+## 新写作工作台（试用阶段）
+
+入口：https://sleepy-m.github.io/studio/ 。采用 Vditor 3.11.2，即时渲染、公式预览、大纲、全屏、表格和代码高亮。依赖随博客托管，不依赖第三方编辑器 CDN。
+
+当前仅用于试写：多草稿自动保存于当前浏览器 localStorage，可下载/导入纯正文 Markdown。支持粘贴/拖入 PNG、JPEG、WebP、GIF（每张至多 2MB），以 data URL 嵌入草稿。存储空间不足会提示备份，不会丢弃旧草稿以腾出空间。带 front matter 的文件暂拒绝导入，避免元数据丢失。
+
+尚未接通 GitHub 登录、跨电脑草稿同步、现有文章读取和云端发布，因此 `/admin/` 与导航中的“写文章”继续使用原后台。工作台公开可访问，但只能编辑访问者自己的本机草稿，不能写入仓库。正式接通需新增安全的授权服务，并单独确认其 GitHub 仓库写入权限。
+
 ## 外观方案 A
 
 2026-10-14 应用 Fluid、蓝灰配色、本站 SVG 山峦封面和明暗切换。中文使用思源黑体同源的 Noto Sans SC Variable，英文 Inter Variable，代码 JetBrains Mono。

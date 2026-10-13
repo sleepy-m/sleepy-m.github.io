@@ -39,6 +39,7 @@
     "marked": "^15.0.12",
     "nprogress": "^0.2.0",
     "tocbot": "^4.36.8",
-    "turndown": "7.2.1"
+    "turndown": "7.2.1",
+    "vditor": "3.11.2"
   }
 }

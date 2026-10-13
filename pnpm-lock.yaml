@@ -92,6 +92,9 @@ importers:
       turndown:
         specifier: 7.2.1
         version: 7.2.1
+      vditor:
+        specifier: 3.11.2
+        version: 3.11.2
 
 packages:
 
@@ -759,6 +762,9 @@ packages:
   destroy@1.2.0:
     resolution: {integrity: sha512-2sJGJTaXIIaR1w4iJSNoN0hnMY7Gpc/n8D4qSCJw8QqFWXf7cuAgnEHxBpweaVcPevC2l3KpjYCx3NypQQgaJg==}
     engines: {node: '>= 0.8', npm: 1.2.8000 || >= 1.4.16}
+
+  diff-match-patch@1.0.5:
+    resolution: {integrity: sha512-IayShXAgj/QMXgB0IWmKx+rOPuGMhqm5w6jvFxmVenXKIzRqTAAsbBPT3kWQeGANj3jGgvcvv4yK6SxqYmikgw==}
 
   disqusjs@3.2.1:
     resolution: {integrity: sha512-LGXodqaYqoSaS7tRyQ8uBEaoQdph2LCZOe6cYu7GcFMiZZTwObl0HV223HOS/avHn25zoQM9fiYnP7Bbkypwkw==}
@@ -2005,6 +2011,9 @@ packages:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
 
+  vditor@3.11.2:
+    resolution: {integrity: sha512-8QguQQUPWbBFocnfQmWjz4jiykQnvsmCuhOomGIVVK7vc+dQq2h8w9qQQuEjUTZpnZT5fEdYbj4aLr1NGdAZaA==}
+
   vscode-jsonrpc@8.2.0:
     resolution: {integrity: sha512-C+r0eKJUIfiDIfwJhria30+TYWPtuHJXHtI7J0YlOmKAo7ogxP20T0zxB7HZQIFhIyvoBPwWskjxrvAtfjyZfA==}
     engines: {node: '>=14.0.0'}
@@ -2871,6 +2880,8 @@ snapshots:
   depd@2.0.0: {}
 
   destroy@1.2.0: {}
+
+  diff-match-patch@1.0.5: {}
 
   disqusjs@3.2.1(preact@8.1.0):
     dependencies:
@@ -4283,6 +4294,10 @@ snapshots:
   uuid@11.1.1: {}
 
   vary@1.1.2: {}
+
+  vditor@3.11.2:
+    dependencies:
+      diff-match-patch: 1.0.5
 
   vscode-jsonrpc@8.2.0: {}
 
