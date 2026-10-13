@@ -64,7 +64,7 @@ async function publish(data) {
     if(old!==null)atomic(path.join(local,'backups',`${Date.now()}-${entry.id}.md`),old);
     const meta=old===null?{}:parse(old).meta;
     Object.assign(meta,{title:entry.title,date:entry.date,categories:entry.categories,tags:entry.tags});
-    atomic(file,'---\n'+yaml.dump(meta,{lineWidth:-1})+'---\n\n'+entry.body+'\n');
+    atomic(file,'---\n'+yaml.dump(meta,{lineWidth:-1})+'---\n\n'+entry.body.trim()+'\n');
     // Update the draft version immediately, so a failed push can safely be retried.
     entry.baseHash=digest(fs.readFileSync(file,'utf8')); atomic(draftFile(entry.id),JSON.stringify(entry));
     const assets=[...entry.body.matchAll(/\/uploads\/([a-f0-9-]+\.(?:png|jpg|gif|webp))/g)].map(m=>m[1]);

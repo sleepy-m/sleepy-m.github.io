@@ -26,6 +26,25 @@ $('upload').onchange=async()=>{const file=$('upload').files[0];if(!file)return;t
 $('mode').onclick=()=>{if(!sourceMode){$('source').value=current().body;}else{$('editor').innerHTML=DOMPurify.sanitize(marked.parse($('source').value));}sourceMode=!sourceMode;$('source').classList.toggle('hidden',!sourceMode);$('editor').classList.toggle('hidden',sourceMode);$('mode').textContent=sourceMode?'返回编辑':'查看原文';};
 $('new').onclick=async()=>{if(publishing)return;try{await save();display({id:'article-'+Date.now()+'-'+crypto.randomUUID().slice(0,8),title:'',date:today(),categories:[],tags:[],body:'',baseHash:null,published:false});$('title').focus();}catch(e){notice(e.message,true);}};
 $('save').onclick=()=>save().then(()=>notice('草稿已保存到这台电脑。')).catch(e=>notice(e.message,true));
-$('publish').onclick=async()=>{if(publishing||!entry)return;const data=current();if(!data.title.trim()){notice('请先填写标题',true);$('title').focus();return;}if(!confirm('将这篇文章公开发布到博客？'))return;publishing=true;clearTimeout(timer);document.querySelectorAll('button').forEach(b=>b.disabled=true);$('editor').contentEditable='false';document.querySelectorAll('input,textarea').forEach(e=>e.disabled=true);try{await saveQueue;notice('正在发布，请稍候……');const result=await api('/api/publish',data);display(result.entry);await refresh();notice('已提交，网站正在更新……');for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,4000));const status=await api('/api/status');if(status.status==='completed'&&status.conclusion==='success'){notice('发布成功！点击右上角“查看博客”查看。');break;}if(status.status==='completed'&&status.conclusion&&status.conclusion!=='success'){notice('文章已保存，但网站更新失败，请查看发布记录。',true);break;}}}catch(e){notice('发布未完成：'+e.message+'。草稿会保留。',true);try{const saved=await api('/api/entry?id='+encodeURIComponent(data.id));entry.baseHash=saved.baseHash;}catch{}}finally{publishing=false;document.querySelectorAll('button,input,textarea').forEach(e=>e.disabled=false);$('editor').contentEditable='true';}};
+$('publish').onclick=async()=>{
+  if(publishing||!entry)return;
+  const data=current();
+  if(!data.title.trim()){notice('请先填写标题',true);$('title').focus();return;}
+  publishing=true;clearTimeout(timer);
+  document.querySelectorAll('button,input,textarea').forEach(e=>e.disabled=true);$('editor').contentEditable='false';
+  try{
+    await saveQueue;notice('正在发布，请稍候……');
+    const result=await api('/api/publish',data);display(result.entry);await refresh();
+    notice('已提交，网站正在更新……');
+    for(let i=0;i<30;i++){
+      await new Promise(r=>setTimeout(r,4000));const status=await api('/api/status');
+      if(status.status==='completed'&&status.conclusion==='success'){notice('发布成功！点击右上角“查看博客”查看。');break;}
+      if(status.status==='completed'&&status.conclusion&&status.conclusion!=='success'){notice('文章已保存，但网站更新失败，请查看发布记录。',true);break;}
+    }
+  }catch(e){
+    notice('发布未完成：'+e.message+'。草稿会保留。',true);
+    try{const saved=await api('/api/entry?id='+encodeURIComponent(data.id));entry.baseHash=saved.baseHash;}catch{}
+  }finally{publishing=false;document.querySelectorAll('button,input,textarea').forEach(e=>e.disabled=false);$('editor').contentEditable='true';}
+};
 window.addEventListener('beforeunload',e=>{if(dirty||publishing){e.preventDefault();e.returnValue='';}});
 refresh().catch(e=>notice('无法连接博客管理：'+e.message,true));
