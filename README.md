@@ -1,6 +1,13 @@
 # 个人博客
 
-使用 Hexo + NexT + GitHub Pages，主编辑方式为 Pages CMS 在线可视化后台。文章底层仍使用 Markdown。
+使用 Hexo + Fluid + GitHub Pages，主编辑方式为 Pages CMS 在线可视化后台。文章底层仍使用 Markdown。
+
+## 外观方案 A
+
+2026-10-14 应用 Fluid、蓝灰配色、本站 SVG 山峦封面和明暗切换。中文使用思源黑体同源的 Noto Sans SC Variable，英文 Inter Variable，代码 JetBrains Mono。
+字体、核心脚本、代码复制和 KaTeX 样式均随站托管。文章阅读进度条和轻量圆环光标已开启；触屏或 prefers-reduced-motion 模式不启用光标动画。
+外观配置：`_config.fluid.yml`，自定义样式：`source/css/personal.css`，交互：`source/js/personal.js`，静态字体与脚本由 `scripts/fluid-assets.js` 从锁定依赖生成。
+原 NexT 配置保留在 `_config.next.yml`，可通过历史版本恢复。
 
 ## 日常使用
 

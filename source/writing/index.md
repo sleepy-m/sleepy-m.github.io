@@ -1,5 +1,6 @@
 ---
 title: Markdown 与数学公式写作示例
+math: true
 date: 2026-10-13
 ---
 

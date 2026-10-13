@@ -22,7 +22,7 @@ future: false
 date_format: YYYY-MM-DD
 updated_option: date
 per_page: 10
-theme: next
+theme: fluid
 search:
   path: search.xml
   field: post

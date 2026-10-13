@@ -1,5 +1,6 @@
 ---
 title: 关于
+layout: about
 date: 2026-10-13 12:00:00
 ---
 

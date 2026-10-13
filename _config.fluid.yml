@@ -1,0 +1,132 @@
+favicon: /img/blog-mark.svg
+apple_touch_icon: /img/blog-mark.svg
+iconfont: ''
+search:
+  enable: true
+  path: /search.xml
+  generate_path: search.xml
+navbar:
+  blog_title: ''
+  menu:
+    - {key: home, name: 首页, link: /}
+    - {key: archive, name: 归档, link: /archives/}
+    - {key: category, name: 分类, link: /categories/}
+    - {key: tag, name: 标签, link: /tags/}
+    - {key: about, name: 关于, link: /about/}
+    - {key: writing, name: 写作帮助, link: /writing/}
+    - {key: admin, name: 写文章, link: /admin/}
+dark_mode:
+  enable: true
+  default: auto
+color:
+  body_bg_color: '#f1f5f9'
+  body_bg_color_dark: '#101923'
+  navbar_bg_color: '#253d57'
+  navbar_bg_color_dark: '#17293d'
+  text_color: '#334155'
+  text_color_dark: '#cbd5e1'
+  board_color: '#ffffff'
+  board_color_dark: '#1a2939'
+  post_text_color: '#334155'
+  post_text_color_dark: '#cbd5e1'
+  post_heading_color: '#18334d'
+  post_heading_color_dark: '#e1edf9'
+  post_link_color: '#376f9c'
+  post_link_color_dark: '#8cbfe6'
+  link_hover_color: '#5794c3'
+  link_hover_color_dark: '#b9dcf7'
+font:
+  font_size: 16px
+  font_family: '"Inter Variable", "Noto Sans SC Variable", "Microsoft YaHei", sans-serif'
+  code_font_size: 88%
+custom_css:
+  - /vendor/fonts/inter/index.css
+  - /vendor/fonts/chinese/index.css
+  - /vendor/fonts/code/index.css
+  - /vendor/katex/katex.min.css
+  - /css/personal.css
+custom_js:
+  - /js/personal.js
+index:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 66
+  banner_mask_alpha: 0.15
+  slogan:
+    enable: true
+    text: 记录、学习与分享
+  auto_excerpt:
+    enable: true
+    length: 150
+  post_url_target: _self
+post:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 42
+  banner_mask_alpha: 0.28
+  meta:
+    views:
+      enable: false
+  toc:
+    enable: true
+    headingSelector: h1,h2,h3,h4
+  copyright:
+    enable: false
+  image_zoom:
+    enable: false
+  math:
+    enable: true
+    specific: false
+    engine: katex
+  footnote:
+    enable: false
+archive:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 42
+category:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 42
+tag:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 42
+about:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 42
+  avatar: /img/blog-mark.svg
+  name: sleepy-m
+  intro: 记录学习与实践，分享值得留下的经验。
+  icons:
+    - {class: '', link: 'https://github.com/sleepy-m', tip: GitHub}
+page:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 42
+page404:
+  banner_img: /img/blue-horizon.svg
+  banner_img_height: 60
+footer:
+  content: '© 2026 sleepy-m · 记录、学习与分享 · <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="noopener">Fluid</a>'
+  statistics:
+    enable: false
+fun_features:
+  typing:
+    enable: false
+  anchorjs:
+    enable: true
+  progressbar:
+    enable: true
+    color: '#8cbfe6'
+code:
+  copy_btn: true
+  highlight:
+    line_number: false
+    lib: highlightjs
+    highlightjs:
+      style: github
+      style_dark: github-dark
+static_prefix:
+  jquery: /vendor/jquery/
+  bootstrap: /vendor/bootstrap/
+  github_markdown: /vendor/markdown/
+  nprogress: /vendor/nprogress/
+  anchor: /vendor/anchor/
+  tocbot: /vendor/tocbot/
+  clipboard: /vendor/clipboard/
+  katex: /vendor/katex/
