@@ -29,6 +29,9 @@
 
 ## 网站与发布
 
+Markdown 由 hexo-renderer-markdown-it 渲染，数学公式使用 KaTeX。支持 `$...$` 行内公式和 `$$...$$` 独立公式，不需要逐篇开启。公式字体和样式随本站托管。
+写法与示例：https://sleepy-m.github.io/writing/ 。在线编辑器的公式请在 Source 模式输入，数学渲染发生在生成的博客页面上，不能保证第三方编辑器实时预览。
+
 已于 2026-10-13 发布到 https://sleepy-m.github.io/ ，仓库为 https://github.com/sleepy-m/sleepy-m.github.io 。
 账号使用本机已登录的 `sleepy-m`。GitHub Pages 已设置为 GitHub Actions 自动构建。
 `.github/workflows/pages.yml` 已配置自动构建发布，不需要手工上传 public。

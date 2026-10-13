@@ -27,9 +27,21 @@ search:
   path: search.xml
   field: post
   content: true
-marked:
-  prependRoot: true
-  postAsset: true
+markdown:
+  preset: default
+  render:
+    html: true
+    breaks: false
+    linkify: true
+    typographer: false
+  plugins:
+    - name: '@traptitech/markdown-it-katex'
+      options:
+        throwOnError: false
+        trust: false
+  images:
+    prepend_root: true
+    post_asset: true
 highlight:
   enable: true
   line_number: false

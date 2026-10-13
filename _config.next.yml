@@ -1,4 +1,11 @@
 scheme: Mist
+math:
+  every_page: true
+  mathjax:
+    enable: false
+  katex:
+    enable: true
+    copy_tex: true
 vendors:
   internal: local
   plugins: local

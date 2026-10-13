@@ -36,6 +36,7 @@ content:
       - name: body
         label: 正文
         type: rich-text
+        description: 支持 Markdown；LaTeX 数学公式建议在 Source 原文模式输入，发布后博客会显示公式。
         options:
           format: markdown
           switcher: true
