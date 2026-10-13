@@ -8,6 +8,7 @@ menu:
   标签: /tags/ || fa fa-tags
   归档: /archives/ || fa fa-archive
   关于: /about/ || fa fa-user
+  管理博客: /admin/ || fa fa-pen-to-square
 footer:
   since: 2026
   powered: false

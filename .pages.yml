@@ -1,0 +1,83 @@
+media:
+  input: source/uploads
+  output: /uploads
+  categories: [image]
+  rename: random
+settings:
+  content:
+    merge: true
+content:
+  - name: posts
+    label: 文章管理
+    type: collection
+    path: source/_posts
+    format: yaml-frontmatter
+    subfolders: false
+    filename:
+      template: "{year}-{month}-{day}-{primary}.md"
+      field: create
+    view:
+      primary: title
+      fields: [title, date, categories]
+      sort: date
+      order: desc
+    fields:
+      - name: title
+        label: 文章标题
+        type: string
+        required: true
+      - name: date
+        label: 发布日期
+        type: date
+        required: true
+        options:
+          time: false
+          format: yyyy-MM-dd
+      - name: categories
+        label: 分类
+        type: string
+        list: true
+      - name: tags
+        label: 标签
+        type: string
+        list: true
+      - name: body
+        label: 文章正文
+        type: rich-text
+        options:
+          format: markdown
+          switcher: true
+  - name: about
+    label: 关于我
+    type: file
+    path: source/about/index.md
+    format: yaml-frontmatter
+    fields:
+      - name: title
+        label: 页面标题
+        type: string
+        required: true
+      - name: body
+        label: 个人介绍
+        type: rich-text
+        options:
+          format: markdown
+  - name: site
+    label: 博客设置
+    type: file
+    path: _config.yml
+    format: yaml
+    fields:
+      - name: title
+        label: 博客名称
+        type: string
+        required: true
+      - name: subtitle
+        label: 一句话介绍
+        type: string
+      - name: description
+        label: 博客简介
+        type: text
+      - name: author
+        label: 作者名称
+        type: string
