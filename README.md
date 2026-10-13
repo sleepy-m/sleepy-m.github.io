@@ -1,14 +1,15 @@
 # 个人博客
 
-使用 Hexo + NexT + GitHub Pages，接入 Pages CMS 网页编辑后台。文章底层仍使用 Markdown。
+使用 Hexo + NexT + GitHub Pages，本机配有可视化博客管理工具。文章底层仍使用 Markdown。
 
 ## 日常使用
 
-推荐通过 https://sleepy-m.github.io/admin/ 进入网页后台，登录 GitHub 账号 sleepy-m，选择 sleepy-m.github.io 仓库的 main 分支。
-首次使用需要在 GitHub 连接 Pages CMS，仅授权这一个博客仓库。后台提供文章管理、图片管理、关于我和博客设置。
-编辑器采用可视化正文编辑；保存文章会公开提交到仓库并触发自动发布，最终页面更新需要等待构建完成。
-`.pages.yml` 是后台配置，网页上传的图片在 `source/uploads` 中。
-博客设置采用 merge 模式保留没有在表单中显示的 Hexo 配置。后台不提供独立草稿开关。
+双击 `打开博客管理.cmd`，自动打开 http://127.0.0.1:4318/ 。
+选择文章修改，或点击“写新文章”，直接排版和插入图片。草稿自动保存，写完点击“发布到博客”。
+复用本机 GitHub 登录，无需安装第三方 GitHub App。发布成功后等待自动构建更新网站。
+管理工具只监听本机回环地址，换电脑需要安装依赖和登录 GitHub。
+`.local/drafts` 是本机草稿，`.local/uploads` 是未发布图片，`.local/backups` 保存编辑前的文章副本。这些目录不会推送到 GitHub，请单独备份。
+公开文章在 `source/_posts`，发布的图片在 `source/uploads`。删除文章等高级操作仍可通过源码维护。
 
 ### 可选的本地编辑方式
 
@@ -45,4 +46,4 @@ pnpm preview
 保留整个源码目录（不需要 node_modules 和 public），尤其是 source、配置文件及 pnpm-lock.yaml。
 更换托管平台时，重新生成 public 并上传即可。更换博客框架时，Markdown 和图片可以继续使用。
 草稿可放在 source/_drafts，默认不生成网页；但推送到公开仓库后草稿源文件仍是公开的。
-网页编辑会直接更新远程仓库。再次使用本地方式前，先运行 `git pull --ff-only` 同步；如果本地已有修改，请先保存并处理冲突。
+发布前会检查远程更新，并在本地干净时自动同步。发生并行修改会保留草稿并提示处理，避免覆盖其他修改。
