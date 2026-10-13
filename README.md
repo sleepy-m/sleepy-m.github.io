@@ -7,7 +7,8 @@
 在任何电脑打开 https://sleepy-m.github.io/admin/ ，自动进入 https://app.pagescms.org/sleepy-m/sleepy-m.github.io/main 。
 使用 GitHub 账号 sleepy-m 登录。该账号已连接 Pages CMS，后台按 GitHub 仓库权限验证编辑资格。不要额外邀请协作者或授权其他账号。
 进入“写文章”，点击 Add new 新建文章；正文可视化编辑，图片可以直接上传。
-默认“公开发布”关闭：Save 保存为线上草稿；写完打开开关并 Save，自动构建发布。
+新文章默认“保存后发布到博客”打开：写完点一次 Save 就自动构建发布；日期自动填写，分类和标签可留空。
+已有草稿不会自动公开。只保存草稿时关闭开关并 Save；已有草稿发布时打开开关并 Save。
 草稿和文章都在 source/_posts，区别是 published: false/true。Hexo 不生成 published:false 的文章、索引或搜索记录。
 后台还提供“关于我”“博客名称与简介”，并使用 merge 模式保留其他 Hexo 配置。
 源码仓库公开，草稿只是从博客页面隐藏，原稿仍可从仓库查看。私人内容不要上传。图片保存在 source/uploads。

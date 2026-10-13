@@ -29,12 +29,18 @@ content:
         type: string
         required: true
       - name: published
-        label: 公开发布
+        label: 保存后发布到博客
         type: boolean
-        default: false
-        description: 关闭时保存为草稿；打开并保存后自动更新博客。
+        default: true
+        description: 已打开时，点右上角保存按钮就会发布；只想存草稿时才关闭。
+      - name: body
+        label: 正文
+        type: rich-text
+        options:
+          format: markdown
+          switcher: true
       - name: date
-        label: 日期
+        label: 日期（自动填写）
         type: date
         required: true
         options:
@@ -48,12 +54,6 @@ content:
         label: 标签
         type: string
         list: true
-      - name: body
-        label: 正文
-        type: rich-text
-        options:
-          format: markdown
-          switcher: true
   - name: about
     label: 关于我
     type: file
