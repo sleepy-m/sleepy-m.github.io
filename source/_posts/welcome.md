@@ -1,5 +1,6 @@
 ---
 title: 从这里开始记录
+published: true
 date: 2026-10-13 09:00:00
 categories:
   - 生活随笔

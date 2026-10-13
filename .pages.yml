@@ -1,0 +1,90 @@
+media:
+  input: source/uploads
+  output: /uploads
+  categories: [image]
+  rename: random
+settings:
+  content:
+    merge: true
+content:
+  - name: posts
+    label: 写文章
+    type: collection
+    path: source/_posts
+    format: yaml-frontmatter
+    subfolders: false
+    filename:
+      template: "{year}{month}{day}-{hour}{minute}{second}-{primary}.md"
+      field: false
+    operations:
+      rename: false
+    view:
+      primary: title
+      fields: [title, published, date]
+      sort: date
+      order: desc
+    fields:
+      - name: title
+        label: 标题
+        type: string
+        required: true
+      - name: published
+        label: 公开发布
+        type: boolean
+        default: false
+        description: 关闭时保存为草稿；打开并保存后自动更新博客。
+      - name: date
+        label: 日期
+        type: date
+        required: true
+        options:
+          time: false
+          format: yyyy-MM-dd
+      - name: categories
+        label: 分类
+        type: string
+        list: true
+      - name: tags
+        label: 标签
+        type: string
+        list: true
+      - name: body
+        label: 正文
+        type: rich-text
+        options:
+          format: markdown
+          switcher: true
+  - name: about
+    label: 关于我
+    type: file
+    path: source/about/index.md
+    format: yaml-frontmatter
+    fields:
+      - name: title
+        label: 页面标题
+        type: string
+        required: true
+      - name: body
+        label: 个人介绍
+        type: rich-text
+        options:
+          format: markdown
+  - name: site
+    label: 博客名称与简介
+    type: file
+    path: _config.yml
+    format: yaml
+    fields:
+      - name: title
+        label: 博客名称
+        type: string
+        required: true
+      - name: subtitle
+        label: 一句话介绍
+        type: string
+      - name: description
+        label: 简介
+        type: text
+      - name: author
+        label: 作者名称
+        type: string

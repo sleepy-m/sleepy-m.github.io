@@ -1,17 +1,22 @@
 # 个人博客
 
-使用 Hexo + NexT + GitHub Pages，本机配有可视化博客管理工具。文章底层仍使用 Markdown。
+使用 Hexo + NexT + GitHub Pages，主编辑方式为 Pages CMS 在线可视化后台。文章底层仍使用 Markdown。
 
 ## 日常使用
 
-双击 `打开博客管理.cmd`，自动打开 http://127.0.0.1:4318/ 。
-选择文章修改，或点击“写新文章”，直接排版和插入图片。草稿自动保存，写完点击“发布到博客”。
-复用本机 GitHub 登录，无需安装第三方 GitHub App。发布成功后等待自动构建更新网站。
-管理工具只监听本机回环地址，换电脑需要安装依赖和登录 GitHub。
-`.local/drafts` 是本机草稿，`.local/uploads` 是未发布图片，`.local/backups` 保存编辑前的文章副本。这些目录不会推送到 GitHub，请单独备份。
-公开文章在 `source/_posts`，发布的图片在 `source/uploads`。删除文章等高级操作仍可通过源码维护。
+在任何电脑打开 https://sleepy-m.github.io/admin/ ，自动进入 https://app.pagescms.org/sleepy-m/sleepy-m.github.io/main 。
+使用 GitHub 账号 sleepy-m 登录。该账号已连接 Pages CMS，后台按 GitHub 仓库权限验证编辑资格。不要额外邀请协作者或授权其他账号。
+进入“写文章”，点击 Add new 新建文章；正文可视化编辑，图片可以直接上传。
+默认“公开发布”关闭：Save 保存为线上草稿；写完打开开关并 Save，自动构建发布。
+草稿和文章都在 source/_posts，区别是 published: false/true。Hexo 不生成 published:false 的文章、索引或搜索记录。
+后台还提供“关于我”“博客名称与简介”，并使用 merge 模式保留其他 Hexo 配置。
+源码仓库公开，草稿只是从博客页面隐藏，原稿仍可从仓库查看。私人内容不要上传。图片保存在 source/uploads。
+跨电脑在线编辑无需安装 Node.js、Git 或本机管理工具。
 
 ### 可选的本地编辑方式
+
+本机可视化工具保留为备用：双击“打开博客管理.cmd”。它只监听回环地址，不是跨电脑访问入口。
+`.local/drafts`、`.local/uploads`、`.local/backups` 是本机私有草稿和备份，不会自动迁移到线上，请单独备份。
 
 1. 双击 `新建文章.cmd`，填写标题，用编辑器修改生成的 Markdown 文件。
 2. 双击 `本地预览.cmd`，打开 http://127.0.0.1:4000 。预览窗口保持运行，停止时按 Ctrl+C。
@@ -28,7 +33,7 @@
 `.github/workflows/pages.yml` 已配置自动构建发布，不需要手工上传 public。
 所有推送到公开仓库的文件均可被别人查看。
 
-## 换电脑
+## 本地开发环境恢复（在线写作不需要）
 
 安装 Node.js 24 LTS、Git 和 pnpm 11，克隆源码后运行：
 

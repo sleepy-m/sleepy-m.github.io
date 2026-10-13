@@ -63,7 +63,7 @@ async function publish(data) {
     if((old===null?null:digest(old))!==entry.baseHash)throw Error('这篇文章已被其他操作修改。草稿已保留，请重新核对文章后发布。');
     if(old!==null)atomic(path.join(local,'backups',`${Date.now()}-${entry.id}.md`),old);
     const meta=old===null?{}:parse(old).meta;
-    Object.assign(meta,{title:entry.title,date:entry.date,categories:entry.categories,tags:entry.tags});
+    Object.assign(meta,{title:entry.title,published:true,date:entry.date,categories:entry.categories,tags:entry.tags});
     atomic(file,'---\n'+yaml.dump(meta,{lineWidth:-1})+'---\n\n'+entry.body.trim()+'\n');
     // Update the draft version immediately, so a failed push can safely be retried.
     entry.baseHash=digest(fs.readFileSync(file,'utf8')); atomic(draftFile(entry.id),JSON.stringify(entry));
