@@ -14,7 +14,7 @@ navbar:
     - {key: tag, name: 标签, link: /tags/}
     - {key: about, name: 关于, link: /about/}
     - {key: writing, name: 写作帮助, link: /writing/}
-    - {key: admin, name: 写文章, link: /admin/}
+    - {key: admin, name: 写文章, link: 'https://sleepym-blog-studio.2036681827.workers.dev/studio/'}
 dark_mode:
   enable: true
   default: auto
