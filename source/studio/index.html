@@ -6,13 +6,13 @@ layout: false
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>写作工作台 · 试用版</title>
+<title>写作工作台</title>
 <link rel="stylesheet" href="/vendor/vditor/dist/index.css"><link rel="stylesheet" href="/vendor/fonts/chinese/index.css"><link rel="stylesheet" href="/vendor/fonts/inter/index.css"><link rel="stylesheet" href="/vendor/fonts/code/index.css"><link rel="stylesheet" href="/studio/studio.css">
 </head><body>
-<header><a href="/">← 博客</a><strong>写作工作台 <small>试用版</small></strong><a href="/admin/" target="_blank" rel="noopener">现有发布后台 ↗</a></header>
-<div class="notice">这里先体验新的写作方式。草稿仅保存在此浏览器，尚未连接账号、云端同步和发布。重要内容请下载备份。</div>
-<div class="workspace"><aside><button id="new">＋ 新建草稿</button><nav id="drafts" aria-label="本机草稿"></nav><p>支持 Markdown 和 LaTeX。<br>顶部工具栏可切换编辑模式、打开大纲和全屏。</p><p>粘贴或拖入图片会嵌入本机草稿；正式版再接通图片上传。</p></aside>
+<header><a href="https://sleepy-m.github.io/">← 博客</a><strong>写作工作台 <small id="account">本机试写</small></strong><a href="https://app.pagescms.org/sleepy-m/sleepy-m.github.io/main" target="_blank" rel="noopener">现有发布后台 ↗</a></header>
+<div class="notice" id="notice">本机试写模式：草稿仅存在此浏览器。云端服务尚在配置中，重要内容请下载备份。</div>
+<div class="workspace"><aside><a class="cloud-link" id="login" href="https://sleepym-blog-studio.2036681827.workers.dev/studio/">打开云端工作台 ↗</a><button id="logout" hidden>退出登录</button><button id="new">＋ 新建草稿</button><h3>草稿</h3><nav id="drafts" aria-label="草稿"></nav><section id="posts-section" hidden><h3>仓库文章</h3><button id="refresh-posts">刷新文章列表</button><nav id="posts" aria-label="仓库文章"></nav></section><p>支持 Markdown 和 LaTeX。<br>顶部工具栏可切换编辑模式、打开大纲和全屏。</p><p>草稿自动保存，发布才更新博客。退出或换电脑前请确认显示“云端已保存”。</p></aside>
 <main><div class="document-header"><input id="title" aria-label="文章标题" placeholder="给文章起个标题"><div class="actions"><button id="import">导入 Markdown</button><input id="file" type="file" accept=".md,.markdown,.txt" hidden><button id="export">下载 Markdown</button></div></div>
-<div id="editor"></div><footer><span id="status" role="status">正在加载编辑器……</span><span>Ctrl / ⌘ + S 保存本机草稿</span></footer></main></div>
+<div id="editor"></div><footer><span id="status" role="status">正在加载编辑器……</span><span>Ctrl / ⌘ + S 保存草稿</span></footer><details class="metadata"><summary>分类、标签和文章日期</summary><label>日期<input id="date" type="date"></label><label>分类（逗号分隔）<input id="categories"></label><label>标签（逗号分隔）<input id="tags"></label></details><div class="publish-bar"><button id="recover" hidden>保留备份并读取最新版本</button><button id="save-cloud" hidden>保存草稿</button><button id="publish" class="primary" hidden>发布到博客</button><a id="deployment" hidden target="_blank" rel="noopener">查看发布进度 ↗</a></div></main></div>
 <script id="vditorIconScript" src="/vendor/vditor/dist/js/icons/ant.js"></script><script src="/vendor/vditor/dist/index.min.js"></script><script src="/studio/studio.js"></script>
 </body></html>

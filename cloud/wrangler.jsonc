@@ -1,0 +1,12 @@
+{
+  "name": "sleepym-blog-studio",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-14",
+  "account_id": "a0ca57e52a26196afcdbc003e04a12ae",
+  "workers_dev": true,
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "sleepym-blog-drafts",
+    "database_id": "5e40f095-47fc-47a7-9a90-b9fc1fca4f27"
+  }]
+}

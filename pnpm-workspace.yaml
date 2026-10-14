@@ -1,3 +1,4 @@
 allowBuilds:
+  esbuild: false
   hexo-util: false
 shamefullyHoist: true
