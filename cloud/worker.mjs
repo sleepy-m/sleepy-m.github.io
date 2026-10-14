@@ -23,7 +23,7 @@ async function digest(text){return b64(new Uint8Array(await crypto.subtle.digest
 const schema=[
  'CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, token TEXT NOT NULL, csrf TEXT NOT NULL, expires INTEGER NOT NULL)',
  'CREATE TABLE IF NOT EXISTS oauth (id TEXT PRIMARY KEY, browser TEXT NOT NULL, verifier TEXT NOT NULL, expires INTEGER NOT NULL)',
- 'CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, payload TEXT NOT NULL, revision INTEGER NOT NULL, updated TEXT NOT NULL, locked INTEGER NOT NULL DEFAULT 0, lock_expires INTEGER NOT NULL DEFAULT 0)'
+ 'CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, payload TEXT NOT NULL, revision INTEGER NOT NULL, updated TEXT NOT NULL, locked INTEGER NOT NULL DEFAULT 0, lock_expires INTEGER NOT NULL DEFAULT 0, lock_id TEXT NOT NULL DEFAULT \'\')'
 ];
 async function setup(env){await env.DB.batch(schema.map(s=>env.DB.prepare(s)));}
 async function gh(token,path,method='GET',body){const r=await fetch('https://api.github.com'+path,{method,headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'sleepym-blog-studio','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});if(!r.ok){if(r.status===401)fail(401,'GitHub 登录已过期，请重新登录。');if(r.status===409||r.status===422)fail(409,'仓库已发生变化，请重新读取文章后核对修改。');fail(r.status===403?403:502,'GitHub 请求未完成（'+r.status+'），草稿已保留，请稍后重试。');}return r.status===204?null:r.json();}
@@ -53,7 +53,21 @@ async function api(req,env,url){
  if(url.pathname==='/api/drafts'&&req.method==='PUT'){const data=await readJson(req);const d=validateDraft(data.draft);if(!Number.isSafeInteger(data.revision)||data.revision<0)fail(400,'缺少草稿版本。');return json(await draftSave(env,d,data.revision));}
  if(url.pathname==='/api/posts'&&req.method==='GET'){const files=await gh(s.token,'/repos/'+OWNER+'/'+REPO+'/contents/source/_posts?ref=main');return json(files.filter(e=>e.type==='file'&&e.name.endsWith('.md')).map(e=>({name:e.name,path:e.path,sha:e.sha})));}
  if(url.pathname==='/api/post'&&req.method==='GET'){const path=postPath(url.searchParams.get('path'));const file=await gh(s.token,'/repos/'+OWNER+'/'+REPO+'/contents/'+path.split('/').map(encodeURIComponent).join('/')+'?ref=main');const parsed=splitPost(dec.decode(unb64(file.content.replace(/\s/g,''))));return json({id:crypto.randomUUID(),title:String(parsed.metadata.title||file.name),body:parsed.body,date:String(parsed.metadata.date||'').slice(0,10),categories:[parsed.metadata.categories||[]].flat().map(String),tags:[parsed.metadata.tags||[]].flat().map(String),path,baseSha:file.sha,revision:0});}
- if(url.pathname==='/api/publish'&&req.method==='POST'){const data=await readJson(req);idCheck(data.id||'');if(!Number.isSafeInteger(data.revision))fail(400,'缺少发布版本。');const row=await env.DB.prepare('UPDATE drafts SET locked=1 WHERE id=? AND revision=? AND locked=0 RETURNING payload').bind(data.id,data.revision).first();if(!row)fail(409,'草稿已变化或正在发布，请刷新核对。');let published=false;try{const d=validateDraft(JSON.parse(row.payload));if(!d.title.trim())fail(400,'发布前请填写标题。');const result=await publish(d,s,env);published=true;await env.DB.prepare('UPDATE drafts SET payload=?,revision=revision+1,updated=?,locked=0 WHERE id=?').bind(JSON.stringify(result),new Date().toISOString(),d.id).run();return json({...result,revision:data.revision+1});}catch(e){if(published)fail(502,'文章已提交到 GitHub，但草稿状态更新失败。请在现有后台核对，勿重复发布。');throw e;}finally{await env.DB.prepare('UPDATE drafts SET locked=0 WHERE id=?').bind(data.id).run();}}
+ if(url.pathname==='/api/publish'&&req.method==='POST'){
+  const data=await readJson(req);idCheck(data.id||'');if(!Number.isSafeInteger(data.revision)||data.revision<1)fail(400,'缺少发布版本。');
+  const lockId=crypto.randomUUID();
+  const row=await env.DB.prepare('UPDATE drafts SET locked=1,lock_id=?,lock_expires=? WHERE id=? AND revision=? AND (locked=0 OR lock_expires<?) RETURNING payload').bind(lockId,now()+600,data.id,data.revision,now()).first();
+  if(!row)fail(409,'草稿已变化或正在发布，请刷新核对。');
+  let published=false;
+  try{
+   const d=validateDraft(JSON.parse(row.payload));if(!d.title.trim())fail(400,'发布前请填写标题。');
+   const result=await publish(d,s,env);published=true;
+   const saved=await env.DB.prepare('UPDATE drafts SET payload=?,revision=revision+1,updated=?,locked=0,lock_id=\'\',lock_expires=0 WHERE id=? AND lock_id=? RETURNING revision').bind(JSON.stringify(result),new Date().toISOString(),d.id,lockId).first();
+   if(!saved)fail(409,'发布状态已改变，请核对 GitHub 提交，勿重复发布。');
+   return json({...result,revision:saved.revision});
+  }catch(e){if(published)fail(502,'文章已提交到 GitHub，但草稿状态更新失败。请在现有后台核对，勿重复发布。');throw e;}
+  finally{await env.DB.prepare('UPDATE drafts SET locked=0,lock_id=\'\',lock_expires=0 WHERE id=? AND lock_id=?').bind(data.id,lockId).run();}
+ }
  if(url.pathname==='/api/deployment'&&req.method==='GET'){const sha=url.searchParams.get('sha');if(!/^[a-f0-9]{40}$/.test(sha||''))fail(400,'提交版本无效。');const response=await fetch('https://api.github.com/repos/'+OWNER+'/'+REPO+'/actions/runs?head_sha='+sha+'&per_page=5',{headers:{'Accept':'application/vnd.github+json','User-Agent':'sleepym-blog-studio','X-GitHub-Api-Version':'2026-03-10'}});if(!response.ok)return json({status:'unknown',url:'https://github.com/'+OWNER+'/'+REPO+'/actions'});const runs=await response.json();const run=runs.workflow_runs.find(r=>r.path==='.github/workflows/pages.yml');return json(run?{status:run.status,conclusion:run.conclusion,url:run.html_url}:{status:'queued'});}
  fail(404,'接口不存在。');
 }

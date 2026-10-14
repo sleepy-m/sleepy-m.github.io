@@ -14,7 +14,7 @@
 
 ```powershell
 node --test cloud/worker.test.mjs
-node node_modules/esbuild/bin/esbuild cloud/worker.mjs --bundle --format=esm --platform=browser --target=es2022 --minify --outfile=.local/worker-upload.mjs
+node node_modules/esbuild/bin/esbuild cloud/entry.mjs --bundle --format=esm --platform=browser --target=es2022 --minify --outfile=.local/worker-upload.mjs
 ```
 
 编译后的 `.local/worker-upload.mjs` 可放到该 Worker 的代码编辑器。不要部署到已有 `white-math-65bc`。启动时创建空白数据库表，不需要手工输入 SQL。`/api/health` 仅返回版本和配置是否齐全；缺少数据库或 Secret 时数据接口返回 503，不开放访问。
