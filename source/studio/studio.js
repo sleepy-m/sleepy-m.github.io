@@ -2,6 +2,14 @@
 (() => {
  const $=id=>document.getElementById(id),cloudHost=location.hostname==='sleepym-blog-studio.2036681827.workers.dev';
  const key='sleepym-studio-drafts-v1',today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai'}).format(new Date());
+ const toggleSidebar=$('toggle-sidebar');
+ toggleSidebar.onclick=()=>{const hidden=document.body.classList.toggle('sidebar-hidden');toggleSidebar.setAttribute('aria-expanded',String(!hidden));toggleSidebar.setAttribute('aria-label',hidden?'展开文章栏':'收起文章栏');};
+ $('focus-mode').onclick=()=>{const focus=document.body.classList.toggle('focus-mode');$('focus-mode').setAttribute('aria-pressed',String(focus));$('focus-mode').textContent=focus?'退出专注':'专注写作';toggleSidebar.disabled=focus;toggleSidebar.setAttribute('aria-expanded',String(!focus&&!document.body.classList.contains('sidebar-hidden')));};
+ const search=document.createElement('input');search.type='search';search.placeholder='搜索文章与草稿';search.setAttribute('aria-label','搜索文章与草稿');search.className='article-search';
+ $('new').after(search);
+ function filterArticles(){for(const container of ['posts','drafts'])for(const b of $(container).querySelectorAll('button'))b.hidden=!b.textContent.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase());}
+ search.addEventListener('input',filterArticles);
+ if(innerWidth<=650){document.body.classList.add('sidebar-hidden');toggleSidebar.setAttribute('aria-expanded','false');toggleSidebar.setAttribute('aria-label','展开文章栏');}
  const sample='## 像 Typora 一样开始写作\n\n输入 **粗体**、列表和标题，离开当前段落即可看到排版。\n\n### 数学公式\n\n行内公式：$E=mc^2$。\n\n$$\n\\int_0^1 x^2\\,dx=\\frac{1}{3}\n$$\n\n### 表格和代码\n\n| 功能 | 体验 |\n| --- | --- |\n| Markdown | 即时渲染 |\n| LaTeX | 公式预览 |\n\n```python\ndef hello():\n    print("你好，博客！")\n```\n';
  let drafts=[],active,editor,ready=false,timer,me=null,queue=Promise.resolve(),storageFailed=false,busy=false,conflict=false,uploads=0;
  function status(text){$('status').textContent=text;$('recover').hidden=!(me&&active&&(active.path||active.conflict));}
@@ -17,6 +25,7 @@
    const b=document.createElement('button');b.textContent=(d.cloud?'☁ ':'')+(d.title||'未命名草稿')+(d.unsynced?' · 未同步':'');b.className=d===active?'active':'';
    b.onclick=async()=>{if(busy||!ready)return;clearTimeout(timer);saveLocal();if(me&&active.unsynced&&!conflict)cloudSave();try{await queue;}catch{}active=d;conflict=!!d.conflict;fillFields();editor.setValue(d.body);list();status(d.unsynced?'当前是未同步的本机备份。':d.cloud?'已打开云端草稿':'已打开本机草稿');};$('drafts').append(b);
   }
+  filterArticles();
  }
  function saveLocal(){if(!ready)return false;active.title=$('title').value;active.body=editor.getValue();active.date=$('date').value||today();active.categories=split($('categories').value);active.tags=split($('tags').value);active.updated=new Date().toISOString();try{localStorage.setItem(key,JSON.stringify(drafts));storageFailed=false;list();return true;}catch{storageFailed=true;status('本机备份失败（空间不足或被禁用），请立即下载备份。');return false;}}
  function cloudSave(){if(!me||conflict||!ready)return queue;saveLocal();const d=active;const snapshot={id:d.id,title:d.title,body:d.body,date:d.date,categories:d.categories,tags:d.tags,path:d.path,baseSha:d.baseSha};d.unsynced=true;saveLocal();queue=queue.catch(()=>{}).then(async()=>{if(d.conflict)return;try{const result=await api('/api/drafts','PUT',{draft:snapshot,revision:d.revision||0});d.revision=result.revision;d.cloud=true;if(d.body===snapshot.body&&d.title===snapshot.title&&JSON.stringify(d.tags)===JSON.stringify(snapshot.tags)&&JSON.stringify(d.categories)===JSON.stringify(snapshot.categories)&&d.date===snapshot.date)d.unsynced=false;localStorage.setItem(key,JSON.stringify(drafts));if(d===active)status(d.unsynced?'仍有修改待同步……':'云端已保存 · '+new Date().toLocaleTimeString());list();}catch(error){d.unsynced=true;if(error.status===409){d.conflict=true;if(d===active)conflict=true;}try{localStorage.setItem(key,JSON.stringify(drafts));}catch{}if(d===active)status(error.message+' 当前内容仍在本机，可下载备份。');list();throw error;}});queue.catch(()=>{});return queue;}
@@ -29,7 +38,7 @@
    const items=await api('/api/posts');$('posts').replaceChildren();
    $('posts-message').textContent=items.length?'点击下面的文章即可编辑；修改先存草稿，点击“更新博客文章”才更新原文。':'仓库中还没有文章，可以先新建一篇。';
    for(const item of items){
-    const b=document.createElement('button');b.textContent='编辑 · '+item.name;b.title=item.path;
+    const b=document.createElement('button');const cached=drafts.find(d=>d.path===item.path);b.textContent=cached?.title||item.name.replace(/\.md$/i,'').replace(/^\d{4}-?\d{2}-?\d{2}[-_]?/,'').replace(/[-_]+/g,' ').trim()||item.name;b.title=item.path;const filename=document.createElement('span');filename.className='article-file';filename.textContent=item.name;b.append(filename);
     b.onclick=async()=>{
      if(busy||!ready)return;clearTimeout(timer);saveLocal();controls(true);
      try{
@@ -44,6 +53,7 @@
      }catch(e){status(e.message);}finally{controls(false);}
     };$('posts').append(b);
    }
+   filterArticles();
   }catch(e){$('posts-message').textContent='文章列表读取失败：'+e.message+' 请点击“刷新文章列表”重试。';throw e;}
  }
  async function connect(){if(!cloudHost)return;$('login').textContent='使用 GitHub 登录';$('login').href='/auth/login';try{me=await api('/api/me');$('account').textContent=me.login;$('login').hidden=true;$('logout').hidden=false;$('publish').hidden=false;$('save-cloud').hidden=false;$('posts-section').hidden=false;$('notice').textContent='已连接云端。草稿仅存私有数据库；点击“发布到博客”才会写入公开仓库。未同步时请勿关闭页面。';const remote=await api('/api/drafts');for(const d of remote){const local=drafts.find(x=>x.id===d.id);if(local?.unsynced){local.cloud=true;if(local.revision!==d.revision){local.conflict=true;local.unsynced=true;}}else if(local){Object.assign(local,d,{cloud:true,unsynced:false});}else drafts.push({...d,cloud:true,unsynced:false});}active=drafts.find(d=>d.unsynced)||drafts.find(d=>d.cloud)||drafts[0];conflict=!!active.conflict;fillFields();editor.setValue(active.body);saveLocal();list();status(active.conflict?'本机备份与云端存在版本冲突，请下载备份后刷新核对。':active.unsynced?'恢复了未同步本机备份，按保存继续同步。':'云端连接成功');await loadPosts();}catch(e){me=null;$('notice').textContent=e.status===401?'登录后可在不同电脑查看云端草稿。未登录的试写只保存于本机。':'云端连接未完成：'+e.message;status(e.status===401?'请点击“使用 GitHub 登录”。':e.message);} }
