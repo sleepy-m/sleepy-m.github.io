@@ -10,7 +10,7 @@
  if(!drafts.length)drafts=[{id:crypto.randomUUID(),title:'欢迎试写',body:sample,date:today(),revision:0}];
  active=drafts[0];
  const split=value=>value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
- function fillFields(){ $('title').value=active.title;$('date').value=active.date||today();$('categories').value=(active.categories||[]).join('，');$('tags').value=(active.tags||[]).join('，'); }
+ function fillFields(){ $('title').value=active.title;$('date').value=active.date||today();$('categories').value=(active.categories||[]).join('，');$('tags').value=(active.tags||[]).join('，');$('publish').textContent=active.path?'更新博客文章':'发布到博客'; }
  function list(){
   $('drafts').replaceChildren();
   for(const d of drafts){
@@ -23,7 +23,29 @@
  function changed(){if(!ready||busy)return;active.unsynced=!!me;saveLocal();clearTimeout(timer);status(me?'本机已备份，等待云端同步……':storageFailed?'本机备份失败，请下载备份。':'已保存至此浏览器');if(me&&!conflict)timer=setTimeout(cloudSave,1500);}
  async function create(title,body){if(!ready||busy)return;clearTimeout(timer);saveLocal();if(me&&active.unsynced&&!conflict)cloudSave();try{await queue;}catch{}active={id:crypto.randomUUID(),title,body,date:today(),categories:[],tags:[],revision:0};drafts.unshift(active);conflict=false;fillFields();editor.setValue(body);saveLocal();if(me)cloudSave();else status('新建本机草稿');}
  function controls(disabled){busy=disabled;for(const id of ['new','import','title','date','tags','categories','save-cloud','publish','refresh-posts','logout','recover'])$(id).disabled=disabled;if(ready){if(disabled)editor.disabled();else editor.enable();}}
- async function loadPosts(){const items=await api('/api/posts');$('posts').replaceChildren();for(const item of items){const b=document.createElement('button');b.textContent=item.name;b.onclick=async()=>{if(busy||!ready)return;clearTimeout(timer);saveLocal();try{await queue;}catch{}controls(true);try{const existing=drafts.find(d=>d.path===item.path);if(existing){active=existing;conflict=!!existing.conflict;}else{active=await api('/api/post?path='+encodeURIComponent(item.path));drafts.unshift(active);conflict=false;}fillFields();editor.setValue(active.body);saveLocal();list();status(existing?'已打开该文章的草稿，避免覆盖未发布修改。':'文章已读取，修改自动存草稿，点击发布才更新博客。');}catch(e){status(e.message);}finally{controls(false);}};$('posts').append(b);} }
+ async function loadPosts(){
+  $('posts-message').textContent='正在读取博客文章……';
+  try{
+   const items=await api('/api/posts');$('posts').replaceChildren();
+   $('posts-message').textContent=items.length?'点击下面的文章即可编辑；修改先存草稿，点击“更新博客文章”才更新原文。':'仓库中还没有文章，可以先新建一篇。';
+   for(const item of items){
+    const b=document.createElement('button');b.textContent='编辑 · '+item.name;b.title=item.path;
+    b.onclick=async()=>{
+     if(busy||!ready)return;clearTimeout(timer);saveLocal();controls(true);
+     try{
+      if(me&&active.unsynced){if(conflict)throw Error('当前草稿存在冲突，请先下载备份或读取最新版本。');await cloudSave();}
+      await queue;
+      const existing=drafts.find(d=>d.path===item.path);
+      if(existing){active=existing;conflict=!!existing.conflict;}
+      else{active=await api('/api/post?path='+encodeURIComponent(item.path));drafts.unshift(active);conflict=false;}
+      fillFields();editor.setValue(active.body);saveLocal();list();
+      if(!existing)await cloudSave();
+      status(existing?'已打开原文章的编辑草稿；点击“更新博客文章”更新原文，不会新建重复文章。':'原文章已载入并另存云端编辑草稿。修改后点击“更新博客文章”，原文地址保持不变。');
+     }catch(e){status(e.message);}finally{controls(false);}
+    };$('posts').append(b);
+   }
+  }catch(e){$('posts-message').textContent='文章列表读取失败：'+e.message+' 请点击“刷新文章列表”重试。';throw e;}
+ }
  async function connect(){if(!cloudHost)return;$('login').textContent='使用 GitHub 登录';$('login').href='/auth/login';try{me=await api('/api/me');$('account').textContent=me.login;$('login').hidden=true;$('logout').hidden=false;$('publish').hidden=false;$('save-cloud').hidden=false;$('posts-section').hidden=false;$('notice').textContent='已连接云端。草稿仅存私有数据库；点击“发布到博客”才会写入公开仓库。未同步时请勿关闭页面。';const remote=await api('/api/drafts');for(const d of remote){const local=drafts.find(x=>x.id===d.id);if(local?.unsynced){local.cloud=true;if(local.revision!==d.revision){local.conflict=true;local.unsynced=true;}}else if(local){Object.assign(local,d,{cloud:true,unsynced:false});}else drafts.push({...d,cloud:true,unsynced:false});}active=drafts.find(d=>d.unsynced)||drafts.find(d=>d.cloud)||drafts[0];conflict=!!active.conflict;fillFields();editor.setValue(active.body);saveLocal();list();status(active.conflict?'本机备份与云端存在版本冲突，请下载备份后刷新核对。':active.unsynced?'恢复了未同步本机备份，按保存继续同步。':'云端连接成功');await loadPosts();}catch(e){me=null;$('notice').textContent=e.status===401?'登录后可在不同电脑查看云端草稿。未登录的试写只保存于本机。':'云端连接未完成：'+e.message;status(e.status===401?'请点击“使用 GitHub 登录”。':e.message);} }
  fillFields();
  try{editor=new Vditor('editor',{cdn:location.origin+'/vendor/vditor',lang:'zh_CN',mode:'ir',height:Math.max(560,innerHeight-300),cache:{enable:false},placeholder:'从这里开始写……',value:active.body,outline:{enable:true,position:'right'},counter:{enable:true,type:'text'},toolbar:['undo','redo','|','headings','bold','italic','strike','|','list','ordered-list','check','quote','|','link','upload','table','code','inline-code','|','edit-mode','outline','fullscreen'],preview:{math:{engine:'KaTeX'},hljs:{style:'github'},markdown:{sanitize:true}},upload:{accept:'image/png,image/jpeg,image/webp,image/gif',handler:async files=>{uploads++;try{for(const file of files){if(!/^image\/(png|jpeg|webp|gif)$/.test(file.type)||file.size>2*1024*1024){status('图片仅支持 PNG/JPEG/WebP/GIF，每张不超过 2MB。');continue;}const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});editor.insertValue('\n![图片]('+data+')\n');}changed();return null;}finally{uploads--;}}},input:changed,after:()=>{ready=true;list();saveLocal();status(storageFailed?'本机保存不可用，请及时下载备份。':'已恢复本机草稿');connect();}});}catch{status('编辑器加载失败，请刷新或使用现有发布后台。');}
