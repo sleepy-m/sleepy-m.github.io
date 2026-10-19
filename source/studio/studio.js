@@ -9,7 +9,7 @@
  $('focus-mode').onclick=()=>{const focus=document.body.classList.toggle('focus-mode');$('focus-mode').setAttribute('aria-pressed',String(focus));$('focus-mode').textContent=focus?'退出专注':'专注写作';toggleSidebar.disabled=focus;toggleSidebar.setAttribute('aria-expanded',String(!focus&&!document.body.classList.contains('sidebar-hidden')));};
  const search=document.createElement('input');search.type='search';search.placeholder='搜索文章与草稿';search.setAttribute('aria-label','搜索文章与草稿');search.className='article-search';
  $('new').after(search);
- function filterArticles(){for(const container of ['posts','drafts'])for(const b of $(container).querySelectorAll('button'))b.hidden=!b.textContent.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase());}
+ function filterArticles(){const query=search.value.trim().toLocaleLowerCase();StudioDocumentTree.filter($('drafts'),query);for(const b of $('posts').querySelectorAll('button'))b.hidden=!b.textContent.toLocaleLowerCase().includes(query);}
  search.addEventListener('input',filterArticles);
  if(innerWidth<=650){document.body.classList.add('sidebar-hidden');toggleSidebar.setAttribute('aria-expanded','false');toggleSidebar.setAttribute('aria-label','展开文章栏');}
  const sample='## 像 Typora 一样开始写作\n\n输入 **粗体**、列表和标题，离开当前段落即可看到排版。\n\n### 数学公式\n\n行内公式：$E=mc^2$。\n\n$$\n\\int_0^1 x^2\\,dx=\\frac{1}{3}\n$$\n\n### 表格和代码\n\n| 功能 | 体验 |\n| --- | --- |\n| Markdown | 即时渲染 |\n| LaTeX | 公式预览 |\n\n```python\ndef hello():\n    print("你好，博客！")\n```\n';
@@ -19,15 +19,22 @@
  try{const saved=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(saved))drafts=saved.filter(d=>typeof d.id==='string'&&typeof d.body==='string'&&typeof d.title==='string');}catch{storageFailed=true;}
  if(!drafts.length)drafts=[{id:crypto.randomUUID(),title:'欢迎试写',body:sample,date:today(),revision:0}];
  active=drafts[0];
+ const Tree=StudioDocumentTree;
+ const childButton=document.createElement('button');childButton.id='new-child';childButton.textContent='＋ 新建子文档';childButton.className='new-child';$('new').after(childButton);
+ $('drafts').previousElementSibling.textContent='文档树';
+ const treeSettings=document.createElement('label');treeSettings.textContent='所属父文档';const parentSelect=document.createElement('select');parentSelect.setAttribute('aria-label','所属父文档');treeSettings.append(parentSelect);document.querySelector('.metadata').append(treeSettings);
+ function refreshParents(){const blocked=Tree.descendants(active,drafts);parentSelect.replaceChildren();const top=document.createElement('option');top.value='';top.textContent='无（顶级文档）';parentSelect.append(top);for(const d of drafts){if(blocked.has(Tree.id(d)))continue;const o=document.createElement('option');o.value=Tree.id(d);o.textContent=d.title||'未命名文档';parentSelect.append(o);}const current=Tree.parent(active);if(current&&![...parentSelect.options].some(o=>o.value===current)){const o=document.createElement('option');o.value=current;o.textContent='父文档尚未载入';parentSelect.append(o);}parentSelect.value=current||'';}
+ parentSelect.onchange=()=>{if(!ready||busy)return;const docId=Tree.id(active);const body=Tree.stamp(editor.getValue(),docId,parentSelect.value);editor.setValue(body);changed();list();};
+ childButton.onclick=async()=>{if(!ready||busy)return;if(!me&&cloudHost){status('请先登录，再创建可跨电脑保存的子文档。');return;}if(conflict){status('请先处理当前文档的版本冲突。');return;}childButton.disabled=true;try{const parentId=Tree.id(active);editor.setValue(Tree.stamp(editor.getValue(),parentId,Tree.parent(active)));changed();clearTimeout(timer);if(me)await cloudSave();const childId=crypto.randomUUID();await create('未命名子文档',Tree.stamp('',childId,parentId));}catch(e){status('子文档未创建：'+e.message);}finally{childButton.disabled=false;}};
  const split=value=>value.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
  function fillFields(){ $('title').value=active.title;$('date').value=active.date||today();$('categories').value=(active.categories||[]).join('，');$('tags').value=(active.tags||[]).join('，');$('publish').textContent=active.path?'更新博客文章':'发布到博客'; }
  function list(){
-  $('drafts').replaceChildren();
+  const treeButtons=new Map();
   for(const d of drafts){
    const b=document.createElement('button');b.textContent=(d.cloud?'☁ ':'')+(d.title||'未命名草稿')+(d.unsynced?' · 未同步':'');b.className=d===active?'active':'';
-   b.onclick=async()=>{if(busy||!ready)return;clearTimeout(timer);saveLocal();if(me&&active.unsynced&&!conflict)cloudSave();try{await queue;}catch{}active=d;conflict=!!d.conflict;fillFields();editor.setValue(d.body);list();status(d.unsynced?'当前是未同步的本机备份。':d.cloud?'已打开云端草稿':'已打开本机草稿');};$('drafts').append(b);
+   b.onclick=async()=>{if(busy||!ready)return;clearTimeout(timer);saveLocal();if(me&&active.unsynced&&!conflict)cloudSave();try{await queue;}catch{}active=d;conflict=!!d.conflict;fillFields();editor.setValue(d.body);list();status(d.unsynced?'当前是未同步的本机备份。':d.cloud?'已打开云端草稿':'已打开本机草稿');};treeButtons.set(d,b);
   }
-  filterArticles();
+  Tree.render($('drafts'),drafts,treeButtons);refreshParents();filterArticles();
  }
  function saveLocal(){if(!ready)return false;active.title=$('title').value;active.body=editor.getValue();active.date=$('date').value||today();active.categories=split($('categories').value);active.tags=split($('tags').value);active.updated=new Date().toISOString();try{localStorage.setItem(key,JSON.stringify(drafts));storageFailed=false;list();return true;}catch{storageFailed=true;status('本机备份失败（空间不足或被禁用），请立即下载备份。');return false;}}
  function cloudSave(){if(!me||conflict||!ready)return queue;saveLocal();const d=active;const snapshot={id:d.id,title:d.title,body:d.body,date:d.date,categories:d.categories,tags:d.tags,path:d.path,baseSha:d.baseSha};d.unsynced=true;saveLocal();queue=queue.catch(()=>{}).then(async()=>{if(d.conflict)return;try{const result=await api('/api/drafts','PUT',{draft:snapshot,revision:d.revision||0});d.revision=result.revision;d.cloud=true;if(d.body===snapshot.body&&d.title===snapshot.title&&JSON.stringify(d.tags)===JSON.stringify(snapshot.tags)&&JSON.stringify(d.categories)===JSON.stringify(snapshot.categories)&&d.date===snapshot.date)d.unsynced=false;localStorage.setItem(key,JSON.stringify(drafts));if(d===active)status(d.unsynced?'仍有修改待同步……':'云端已保存 · '+new Date().toLocaleTimeString());list();}catch(error){d.unsynced=true;if(error.status===409){d.conflict=true;if(d===active)conflict=true;}try{localStorage.setItem(key,JSON.stringify(drafts));}catch{}if(d===active)status(error.message+' 当前内容仍在本机，可下载备份。');list();throw error;}});queue.catch(()=>{});return queue;}

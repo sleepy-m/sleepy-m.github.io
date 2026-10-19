@@ -28,7 +28,7 @@
   let layoutTimer;
   function updateLayout(){
    if(isBusy())return;
-   for(const code of root.querySelectorAll('code[data-type="html-block"]')){if(code.textContent.trim().match(marker))code.parentElement.classList.add('studio-table-meta');}
+   for(const code of root.querySelectorAll('code[data-type="html-block"]')){if(code.textContent.trim().match(marker)||/^<!-- studio-document \{[^\n]*\} -->$/.test(code.textContent.trim()))code.parentElement.classList.add('studio-table-meta');}
    const parsed=tables(getValue()),visible=[...root.querySelectorAll('table')].filter(t=>t.getClientRects().length);
    visible.forEach((t,index)=>{const meta=parsed[index]?.meta;if(!meta||!Array.isArray(meta.widths))return;const widths=meta.widths.map(n=>Math.max(80,Math.min(600,Number(n)||180)));t.style.tableLayout='fixed';t.style.width=widths.reduce((a,b)=>a+b,0)+'px';t.style.maxWidth='none';for(const r of t.rows){for(let i=0;i<r.cells.length;i++)r.cells[i].style.width=(widths[i]||180)+'px';}for(let i=0;i<t.rows.length;i++)t.rows[i].style.height=Math.max(48,Math.min(500,Number(meta.heights?.[i])||64))+'px';});
   }
