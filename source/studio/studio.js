@@ -971,7 +971,8 @@
     document.addEventListener('keydown', event => {
       if (!open || event.isComposing) return;
       const key = event.key;
-      if (key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); return; }
+      // Esc cancels the menu; it must not type a stray "/" into the document.
+      if (key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(false); return; }
       if (key === 'ArrowDown' || key === 'ArrowUp') {
         event.preventDefault(); event.stopPropagation();
         if (!filtered.length) return;

@@ -65,9 +65,12 @@
    const table=node.closest('table');
    return table&&root.contains(table)?table:null;
   }
-  // The button sits just above the table's top-right corner, clear of the text.
+  // The table under the caret, or the first table on screen so the entry point
+  // is discoverable before the user has clicked into a cell.
   function place(){
-   const table=isBusy()?null:caretTable();
+   if(isBusy()){launch.hidden=true;return;}
+   const visible=[...root.querySelectorAll('table')].filter(t=>t.getClientRects().length);
+   const table=caretTable()||visible[0]||null;
    if(!table){launch.hidden=true;anchor=null;return;}
    anchor=table;
    launch.hidden=false;
@@ -89,6 +92,8 @@
    place();
   }
   new MutationObserver(()=>{clearTimeout(layoutTimer);layoutTimer=setTimeout(updateLayout,120);}).observe(root,{childList:true,subtree:true});
+  // Keep the entry point visible whenever tables render.
+  new MutationObserver(()=>{if(!isBusy())setTimeout(place,60);}).observe(root,{childList:true,subtree:true,characterData:true});
   document.addEventListener('selectionchange',()=>{if(!isBusy())place();});
   root.addEventListener('focusout',()=>setTimeout(()=>{if(!document.querySelector('.table-dialog')){launch.hidden=true;}},0));
   window.addEventListener('resize',()=>place());
