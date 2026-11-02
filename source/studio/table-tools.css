@@ -29,6 +29,17 @@
 .vditor-ir .vditor-ir__preview .vditor-copy{display:block;opacity:.5;transition:opacity .14s}
 .vditor-ir .vditor-ir__preview:hover .vditor-copy,.vditor-ir .vditor-copy:focus-within{opacity:1}
 .vditor-ir .vditor-ir__preview .vditor-copy span{display:grid;place-items:center;width:30px;height:28px;border:1px solid var(--line);border-radius:7px;background:var(--paper);box-shadow:var(--shadow-2)}
+/* In a focused code block, stack Vditor's editable text and live highlighted
+   preview in the same grid cell. The transparent editor layer keeps the real
+   caret and selection while the reader sees one continuously rendered block. */
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]{display:grid;grid-template-columns:minmax(0,1fr)}
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__marker--info{grid-column:1;grid-row:1}
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__marker--pre,
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__preview{grid-column:1;grid-row:2;min-width:0}
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__marker--pre{z-index:2;background:transparent!important;color:transparent!important;-webkit-text-fill-color:transparent!important;caret-color:var(--ink);}
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__marker--pre code{color:transparent!important;-webkit-text-fill-color:transparent!important;background:transparent!important}
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__preview{z-index:1;pointer-events:none}
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__preview .vditor-copy{pointer-events:auto}
 @media(max-width:760px){
  .table-context-tools{max-width:96vw;gap:1px;padding:4px}
  .table-context-button{padding:7px 8px;font-size:11px}

@@ -1056,7 +1056,10 @@
   }
 
   function attachEditorAssist(mount) {
-    const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`'};
+    // Backticks are deliberately not paired: Vditor converts ``` into a
+    // fenced code block while typing, and inserting a matching tick first
+    // corrupts that transform and can reset the caret to the document start.
+    const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"};
     mount.addEventListener('keydown', event => {
       if (handleListTab(event)) return;
       const root = editorRoot();
