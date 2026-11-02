@@ -14,20 +14,20 @@
 .table-edit-launch:hover,.table-edit-launch:focus-visible{background:var(--accent);color:var(--paper);border-color:var(--accent);box-shadow:var(--shadow-3);outline:none}
 .table-edit-launch[hidden]{display:none}
 @media(max-width:760px){.table-edit-launch{min-width:84px;height:28px;padding:0 10px;font-size:11.5px}}
-.table-dialog{width:min(760px,94vw);max-height:88dvh;padding:20px 22px;border:1px solid var(--line);border-radius:14px;background:var(--paper);color:var(--ink);box-shadow:0 26px 90px #17251d40}
+.table-dialog{width:min(1040px,96vw);max-height:90dvh;padding:20px 22px;border:1px solid var(--line);border-radius:14px;background:var(--paper);color:var(--ink);box-shadow:0 26px 90px #17251d40;display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain}
 .table-dialog::backdrop{background:#1b241e2e}
-.table-dialog h2{margin:0;font-size:17px;font-weight:650}
-.table-dialog>p{font-size:11.5px;color:var(--muted);margin:6px 0 12px}
-.table-actions{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0}
+.table-dialog h2{margin:0;font-size:17px;font-weight:650;flex:0 0 auto}
+.table-dialog>p{font-size:11.5px;color:var(--muted);margin:6px 0 8px;line-height:1.6;flex:0 0 auto}
+.table-actions{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 12px;flex:0 0 auto}
 .table-actions button{border:1px solid var(--line);font-size:11.5px;padding:5px 10px;color:var(--ink-soft)}
 .table-actions button:hover{background:var(--accent-soft);border-color:#cbd6bf;color:var(--accent-strong)}
-.table-grid-viewport{overflow:auto;max-height:52dvh;border:1px solid var(--line);border-radius:8px;background:#fff}
+.table-grid-viewport{flex:0 0 auto;min-height:0;max-height:55dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border:1px solid var(--line);border-radius:8px;background:#fff}
 .table-grid{border-collapse:collapse;table-layout:fixed;margin:0}
 .table-grid td,.table-grid th{position:relative;border:1px solid var(--line);padding:5px;min-width:72px;vertical-align:top}
 .table-grid th{background:#f4f6ec;font-weight:600}
 .table-grid .selected{outline:2px solid #7e9a72;outline-offset:-2px}
 .table-grid td:focus-within,.table-grid th:focus-within{background:#fbfdf6}
-.table-grid textarea{width:100%;display:block;border:0;resize:none;background:transparent;font:13px/1.55 var(--ui);color:inherit;min-height:30px;padding:2px 3px;outline:0}
+.table-grid textarea{box-sizing:border-box;width:100%;display:block;border:0;resize:none;background:transparent;font:13px/1.55 var(--ui);color:inherit;min-height:32px;padding:2px 3px;outline:0;overflow:auto;overscroll-behavior:contain;white-space:pre-wrap;overflow-wrap:anywhere}
 .column-resize{position:absolute;right:-4px;top:0;bottom:0;width:9px;cursor:col-resize;z-index:3;touch-action:none}
 .row-resize{position:absolute;left:0;right:0;bottom:-4px;height:9px;cursor:row-resize;z-index:4;touch-action:none}
 .column-resize:hover,.column-resize:focus,.row-resize:hover,.row-resize:focus{background:#8aa87b80}
@@ -36,7 +36,8 @@
 .table-dialog-footer button{border:1px solid var(--line);font-size:12.5px;padding:7px 14px}
 .table-dialog-footer .primary{border-color:transparent}
 @media(max-width:600px){
- .table-dialog{padding:14px;width:96vw}
+ .table-dialog{padding:14px;width:96vw;max-height:92dvh}
+ .table-grid-viewport{max-height:58dvh}
  .table-dialog-footer{flex-wrap:wrap}
  .table-selection{width:100%}
  .table-actions button{font-size:11px;padding:5px 8px}

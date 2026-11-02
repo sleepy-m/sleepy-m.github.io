@@ -823,7 +823,13 @@
   // rebuilds one, so ask the live caret where it actually lives.
   function editorRoot() {
     const mount = $('editor');
-    return (mount && mount.querySelector('.vditor-ir .vditor-reset, .vditor-wysiwyg .vditor-reset, .vditor-sv .vditor-reset')) || null;
+    if (!mount) return null;
+    const roots = [...mount.querySelectorAll('.vditor-ir .vditor-reset, .vditor-wysiwyg .vditor-reset, .vditor-sv .vditor-reset')];
+    // Vditor can retain inactive mode roots in the DOM. Use the rendered editor
+    // so first-line slash commands and caret checks never target a hidden copy.
+    return roots.find(node => node.isConnected && node.getClientRects().length && node.isContentEditable)
+      || roots.find(node => node.isConnected && node.getClientRects().length)
+      || null;
   }
 
   function currentBlock() {
@@ -1012,14 +1018,25 @@
       render();
     }, true);
     document.addEventListener('mousedown', event => {
-      if (open && !menu.contains(event.target)) close(true);
+      if (open && !menu.contains(event.target)) close(false);
     });
-    document.addEventListener('scroll', () => { if (open) close(true); }, true);
+    document.addEventListener('scroll', event => {
+      if (open && (event.target === document || event.target === document.documentElement)) close(false);
+    }, true);
     return {
       open: openMenu,
       isOpen: () => open,
       close,
       intercept: event => {
+        const root = editorRoot();
+        const target = event.target;
+        const inEditor = !!root && target instanceof Node && root.contains(target);
+        // The slash menu belongs to the document editor. Never steal keystrokes
+        // from table cells, metadata fields, dialogs, or other page controls.
+        if (!inEditor) {
+          if (open) close(false);
+          return false;
+        }
         if (open) {
           if (event.key === 'Escape') return true;
           if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {

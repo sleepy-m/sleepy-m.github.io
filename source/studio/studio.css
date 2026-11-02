@@ -240,6 +240,11 @@ kbd{font-family:var(--mono);font-size:.82em;background:var(--paper-2);border:1px
 .vditor-reset hr{border:0;border-top:1px solid var(--line);margin:2em 0}
 .vditor-reset img{max-width:100%;border-radius:8px;box-shadow:var(--shadow-2)}
 .vditor-reset table{width:auto;max-width:100%;border-collapse:collapse;font-size:.94em;margin:0 0 1.1em}
+.vditor-reset input[type=checkbox]{appearance:none;position:relative;display:inline-grid;place-items:center;width:17px;height:17px;margin:0 .45em 0 0;border:1.5px solid var(--line);border-radius:5px;background:var(--paper);vertical-align:-3px;cursor:pointer;accent-color:var(--accent);transition:background .14s,border-color .14s,transform .14s}
+.vditor-reset input[type=checkbox]:hover{border-color:var(--accent);transform:scale(1.06)}
+.vditor-reset input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+.vditor-reset input[type=checkbox]:checked::after{content:"";width:8px;height:4px;border:solid #fff;border-width:0 0 2px 2px;transform:rotate(-45deg) translateY(-1px)}
+.vditor-reset input[type=checkbox]:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 28%,transparent);outline-offset:2px}
 .vditor-reset th,.vditor-reset td{border:1px solid var(--line);padding:7px 12px;text-align:left}
 .vditor-reset th{background:var(--paper-2);font-weight:600}
 .vditor-reset tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--ink) 2%,transparent)}
