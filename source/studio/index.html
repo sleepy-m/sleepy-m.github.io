@@ -4,18 +4,111 @@ layout: false
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>写作工作台</title>
 <link rel="stylesheet" href="/vendor/vditor/dist/index.css"><link rel="stylesheet" href="/vendor/fonts/chinese/index.css"><link rel="stylesheet" href="/vendor/fonts/inter/index.css"><link rel="stylesheet" href="/vendor/fonts/code/index.css"><link rel="stylesheet" href="/studio/studio.css">
 <link rel="stylesheet" href="/studio/workspace.css">
 <link rel="stylesheet" href="/studio/table-tools.css">
 <link rel="stylesheet" href="/studio/document-tree.css">
-</head><body>
-<header><div class="brand"><button id="toggle-sidebar" aria-label="收起文章栏" aria-expanded="true" title="显示或隐藏文章栏">☰</button><a href="https://sleepy-m.github.io/" class="wordmark">S<span class="brand-dot">.</span></a><span class="brand-name">写作室 <small id="account">本机试写</small></span></div><div class="header-actions"><button id="focus-mode" aria-pressed="false">专注写作</button><button id="save-cloud" hidden>保存草稿</button><button id="publish" class="primary" hidden>发布到博客</button></div></header>
-<div class="notice" id="notice">本机试写模式：草稿仅存在此浏览器。云端服务尚在配置中，重要内容请下载备份。</div>
-<div class="workspace"><aside><a class="cloud-link" id="login" href="https://sleepym-blog-studio.2036681827.workers.dev/studio/">打开云端工作台 ↗</a><button id="logout" hidden>退出登录</button><button id="new">＋ 新建草稿</button><section id="posts-section" hidden><h3>编辑已有文章</h3><p id="posts-message" role="status">登录后读取文章列表，包含已发布文章及仓库中的未发布文章。</p><button id="refresh-posts">刷新文章列表</button><nav id="posts" aria-label="编辑已有文章"></nav></section><h3>草稿</h3><nav id="drafts" aria-label="草稿"></nav><p>支持 Markdown 和 LaTeX。<br>顶部工具栏可切换编辑模式、打开大纲和全屏。</p><p>草稿自动保存，发布才更新博客。退出或换电脑前请确认显示“云端已保存”。</p></aside>
-<main><div class="document-topline"><span>YOUR WORDS, YOUR SPACE</span><div class="actions"><button id="import">导入</button><input id="file" type="file" accept=".md,.markdown,.txt" hidden><button id="export">下载 Markdown</button></div></div><div class="document-header"><input id="title" aria-label="文章标题" placeholder="写下一个好标题"></div>
-<div id="editor"></div><footer><span id="status" role="status">正在加载编辑器……</span><span>Markdown & LaTeX · Ctrl / ⌘ S</span></footer><details class="metadata"><summary>文章设置 <span>分类 / 标签 / 日期</span></summary><label>日期<input id="date" type="date"></label><label>分类（逗号分隔）<input id="categories"></label><label>标签（逗号分隔）<input id="tags"></label></details><div class="publish-bar"><button id="recover" hidden>保留备份并读取最新版本</button><a id="deployment" hidden target="_blank" rel="noopener">查看发布进度 ↗</a></div><div class="room-footer"><span>慢慢写，让想法生长。</span><a href="https://app.pagescms.org/sleepy-m/sleepy-m.github.io/main" target="_blank" rel="noopener">备用后台 ↗</a></div></main></div>
-<script id="vditorIconScript" src="/vendor/vditor/dist/js/icons/ant.js"></script><script src="/vendor/vditor/dist/index.min.js"></script><script src="/studio/table-tools.js"></script><script src="/studio/document-tree.js"></script><script src="/studio/studio.js"></script>
+</head>
+<body data-theme="paper">
+<header class="app-header">
+ <div class="brand">
+  <button id="toggle-sidebar" class="icon-button" aria-label="收起文章栏" aria-expanded="true" title="显示或隐藏文章栏">☰</button>
+  <a href="https://sleepy-m.github.io/" class="wordmark" title="回到博客">S<span class="brand-dot">.</span></a>
+  <span class="brand-name">写作室</span>
+  <small id="account" class="account">本机草稿</small>
+ </div>
+ <div class="crumb" id="crumb" aria-hidden="true"><span id="crumb-title">未命名</span></div>
+ <div class="header-actions">
+  <div class="save-chip" id="save-chip" data-state="saved" role="status" aria-live="polite" title="草稿自动保存在本机；Ctrl / ⌘ + S 立即保存"><span class="save-dot" aria-hidden="true"></span><span id="save-text">正在载入</span></div>
+  <span class="actions-divider" aria-hidden="true"></span>
+  <button id="theme-toggle" class="icon-button" aria-label="切换深浅色" title="切换深浅色（跟随系统 / 浅色 / 深色）">◐</button>
+  <button id="focus-mode" class="ghost" aria-pressed="false" title="专注写作：隐藏侧栏与属性">专注</button>
+  <button id="save-cloud" hidden>存云端</button>
+  <button id="publish" class="primary" hidden>发布</button>
+  <button id="publish-local" class="primary" title="下载可以放进 source/_posts 的文件">导出</button>
+  <div class="menu-wrap">
+   <button id="more" class="ghost icon-button" aria-haspopup="true" aria-expanded="false" aria-label="更多操作" title="更多操作">⋯</button>
+   <div id="more-menu" class="menu" role="menu" hidden>
+    <button role="menuitem" id="import">导入 Markdown 文件…</button>
+    <button role="menuitem" id="export">下载 .md（含文章属性）</button>
+    <button role="menuitem" id="export-body">只下载正文</button>
+    <hr>
+    <button role="menuitem" id="toggle-outline" aria-pressed="false">大纲</button>
+    <button role="menuitem" id="toggle-wide" aria-pressed="false">宽屏写作</button>
+    <button role="menuitem" id="toggle-typer" aria-pressed="false">打字机模式</button>
+    <button role="menuitem" id="shortcuts">键盘快捷键</button>
+   </div>
+  </div>
+ </div>
+</header>
+<div class="notice" id="notice"><span>本机模式：草稿只存在这台浏览器里。重要内容请用“导出”下载备份，或打开云端工作台登录同步。</span><button id="notice-close" class="icon-button" aria-label="关闭提示" title="关闭提示">×</button></div>
+<div class="workspace">
+ <aside class="sidebar">
+  <button id="close-sidebar" class="icon-button sidebar-close" aria-label="收起文章栏" title="收起文章栏">×</button>
+  <button id="new" class="new-doc"><span>＋</span> 新建文章<kbd>N</kbd></button>
+  <div class="search-wrap">
+   <span class="search-icon" aria-hidden="true">⌕</span>
+   <input id="search" class="article-search" type="search" placeholder="搜索标题、内容、标签" aria-label="搜索文章与草稿">
+  </div>
+  <nav id="results" class="results" aria-label="搜索结果"></nav>
+  <section id="posts-section" hidden>
+   <div class="section-head"><h3>博客文章</h3><button id="refresh-posts" class="text-button">刷新</button></div>
+   <p id="posts-message" role="status">登录后读取博客文章列表。</p>
+   <nav id="posts" aria-label="博客文章"></nav>
+  </section>
+  <section id="drafts-section">
+   <div class="section-head"><h3>文档</h3><button id="new-child" class="text-button" title="在当前文档下新建子文档">＋ 子文档</button></div>
+   <nav id="drafts" aria-label="文档树"></nav>
+  </section>
+  <div class="aside-foot">
+   <a class="cloud-link" id="login" href="https://sleepym-blog-studio.2036681827.workers.dev/studio/">登录云端同步 ↗</a>
+   <button id="logout" hidden class="text-button">退出登录</button>
+   <p class="aside-hint">草稿自动保存在本机，发布才更新博客。</p>
+  </div>
+ </aside>
+ <main class="canvas">
+  <article class="paper" id="paper">
+   <input id="title" aria-label="文章标题" placeholder="无标题文章" autocomplete="off" spellcheck="false">
+   <div class="props" id="props">
+    <div class="props-main">
+     <span class="tag-input" data-field="categories"><span class="tag-icon" aria-hidden="true">▤</span><span class="chips" id="category-chips"></span><input id="categories" type="text" placeholder="分类" aria-label="分类" autocomplete="off"></span>
+     <span class="tag-input" data-field="tags"><span class="tag-icon" aria-hidden="true">#</span><span class="chips" id="tag-chips"></span><input id="tags" type="text" placeholder="标签" aria-label="标签" autocomplete="off"></span>
+     <label class="date-input" title="发布日期"><span aria-hidden="true">🗓</span><input id="date" type="date" aria-label="发布日期"></label>
+    </div>
+    <div class="props-more" hidden>
+     <label class="meta-field"><span>父文档</span><select id="parent-doc" aria-label="所属父文档"></select></label>
+     <label class="meta-toggle" title="关闭时文件带 published: false，博客不会显示它"><input id="published" type="checkbox"><span>已发布</span></label>
+     <button id="extra-fields" class="extra-fields" hidden></button>
+    </div>
+    <button id="props-toggle" class="props-toggle" aria-expanded="false" title="更多文章属性">更多属性</button>
+   </div>
+   <div class="editor-slot"><div id="editor"></div></div>
+   <div class="empty-hint" id="empty-hint" hidden><kbd>/</kbd> 插入标题、表格、图片 · <kbd>?</kbd> 查看快捷键</div>
+   <footer class="doc-footer">
+    <span id="doc-stats">0 字</span>
+    <span id="status" role="status">正在加载编辑器……</span>
+    <span class="footer-hint"><kbd>⌘S</kbd> 保存 · <kbd>/</kbd> 插入 · <kbd>?</kbd> 快捷键</span>
+   </footer>
+  </article>
+  <div class="publish-bar"><button id="recover" hidden>保留备份并读取最新版本</button><a id="deployment" hidden target="_blank" rel="noopener">查看发布进度 ↗</a></div>
+ </main>
+ <aside class="outline-rail" id="outline-rail" aria-label="大纲">
+  <h4>大纲</h4>
+  <nav id="outline" class="outline"></nav>
+  <div class="rail-stats"><span id="rail-stats">0 字</span></div>
+ </aside>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<nav class="mobile-bar" aria-label="写作操作">
+ <button id="mobile-menu" type="button" aria-label="文章列表">☰</button>
+ <button id="mobile-insert" type="button">插入</button>
+ <button id="mobile-save" type="button">保存</button>
+ <button id="mobile-publish" type="button" class="primary" hidden>发布</button>
+</nav>
+<div id="drop-hint" class="drop-hint" hidden><span>松手插入图片或 Markdown 文件</span></div>
+<input id="file" type="file" accept=".md,.markdown,.txt" hidden>
+<script src="/studio/frontmatter.js"></script><script src="/studio/commands.js"></script><script src="/studio/toolbar.js"></script><script id="vditorIconScript" src="/vendor/vditor/dist/js/icons/ant.js"></script><script src="/vendor/vditor/dist/index.min.js"></script><script src="/studio/table-tools.js"></script><script src="/studio/document-tree.js"></script><script src="/studio/studio.js"></script>
 </body></html>

@@ -1,1 +1,8 @@
-.new-child{width:100%;text-align:left;color:var(--accent);border:1px dashed #c7d3bd;margin-bottom:12px;font-size:12px}.doc-tree-line{display:flex;align-items:center;min-width:0}.doc-tree-node{min-width:0}#drafts .doc-tree-line>button:not(.doc-tree-toggle){flex:1;min-width:0;width:auto;padding:9px 6px}#drafts .doc-tree-toggle{width:24px;flex:0 0 24px;padding:5px 0;margin:0;text-align:center;font-size:13px;color:#7c8f6e}.metadata select{font:inherit;color:var(--ink);background:var(--canvas);padding:8px;border:1px solid var(--line);border-radius:4px;max-width:250px}.doc-tree-children{border-left:1px solid #dce3d3;margin-left:10px}
+/* 文档树：缩进层级用细线表示，父文档关系一眼可辨。 */
+.doc-tree-line{display:flex;align-items:center;min-width:0}
+.doc-tree-node{min-width:0}
+#drafts .doc-tree-line>button:not(.doc-tree-toggle){flex:1;min-width:0;width:auto;padding:7px 8px}
+#drafts .doc-tree-toggle{width:22px;flex:0 0 22px;padding:3px 0;margin:0;text-align:center;font-size:11px;color:#8b9a7d;border-radius:6px}
+#drafts .doc-tree-toggle:hover:not(:disabled){background:#e6e9dc;color:var(--accent-strong)}
+#drafts .doc-tree-toggle:disabled{opacity:1;cursor:default;color:#c3c8b6}
+.doc-tree-children{border-left:1px solid #e0e5d7;margin-left:11px;padding-left:2px}

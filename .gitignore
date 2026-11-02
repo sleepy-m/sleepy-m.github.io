@@ -4,5 +4,6 @@ db.json
 .deploy_git/
 .tools/
 .local/
+.wrangler/
 *.log
 .DS_Store

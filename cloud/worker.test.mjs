@@ -5,6 +5,16 @@ import worker,{splitPost,validateDraft,images} from './worker.mjs';
 const origin='https://sleepym-blog-studio.2036681827.workers.dev';
 function database(){const db=new DatabaseSync(':memory:');return {prepare(sql){let values=[];return {bind(...v){values=v;return this;},async first(){return db.prepare(sql).get(...values)||null;},async all(){return {results:db.prepare(sql).all(...values)};},async run(){return {meta:db.prepare(sql).run(...values)};}};},async batch(statements){return Promise.all(statements.map(s=>s.run()));},close(){db.close();}};}
 function context(){return {waitUntil(p){p.catch(()=>{});}};}
+test('static proxy uses workerd-compatible manual redirects and fails closed on redirects',async()=>{
+ const realFetch=globalThis.fetch;
+ try {
+  globalThis.fetch=async(url,options)=>{assert.equal(options.redirect,'manual');assert.equal(url,'https://sleepy-m.github.io/studio/');return new Response('<html>studio</html>',{headers:{'Content-Type':'text/html','Set-Cookie':'untrusted=1'}});};
+  const response=await worker.fetch(new Request(origin+'/studio/'),{},context());
+  assert.equal(response.status,200);assert.equal(response.headers.get('Set-Cookie'),null);assert.equal(response.headers.get('X-Frame-Options'),'DENY');
+  globalThis.fetch=async()=>new Response(null,{status:302,headers:{Location:'https://example.com/'}});
+  assert.equal((await worker.fetch(new Request(origin+'/studio/'),{},context())).status,502);
+ }finally{globalThis.fetch=realFetch;}
+});
 test('YAML metadata and formula source survive parsing',()=>{const d=splitPost('---\ntitle: 你好\ndate: 2026-10-14\ncustom: keep\npublished: false\n---\n\n$E=mc^2$');assert.equal(d.metadata.custom,'keep');assert.equal(d.metadata.date,'2026-10-14');assert.equal(d.body,'$E=mc^2$');assert.throws(()=>splitPost('no front matter'));});
 test('draft validation blocks path traversal and oversized bodies',()=>{const d={id:crypto.randomUUID(),title:'test',body:'text'};assert.equal(validateDraft(d).title,'test');assert.throws(()=>validateDraft({...d,path:'_config.yml',baseSha:'a'.repeat(40)}));assert.throws(()=>validateDraft({...d,path:'source/_posts/../bad.md',baseSha:'a'.repeat(40)}));assert.throws(()=>validateDraft({...d,body:'a'.repeat(1600000)}));assert.throws(()=>validateDraft({...d,tags:['x'.repeat(81)]}));});
 test('inline images become fixed upload paths and reject disguised HTML',async()=>{const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jr2sAAAAASUVORK5CYII=';const result=await images('![图](data:image/png;base64,'+png+')');assert.match(result.body,/\/uploads\/[\da-f-]+\.png/);assert.equal(result.blobs.length,1);await assert.rejects(images('![图](data:image/png;base64,PGh0bWw+PC9odG1sPg==)'));});

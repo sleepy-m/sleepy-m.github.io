@@ -21,6 +21,8 @@ node node_modules/esbuild/bin/esbuild cloud/entry.mjs --bundle --format=esm --pl
 
 ## 当前限制
 
+静态代理使用 `redirect: 'manual'` 并拒绝重定向。实际 workerd 不接受 `redirect: 'error'`；普通 Node.js 测试不足以覆盖这一差异。2026-10-14 已使用 Wrangler 本地 workerd 验证 `/studio/`、`/studio/studio.js` 和 Vditor 主脚本返回 200；仍需部署修正版及真实登录验证。
+
 为了满足 D1 单行数据限制，云端正文连同内嵌图片上限 1.5MB。图片发布时从 data URL 转成上传文件，与文章通过同一 Git tree/commit 发布。一次只有一个发布操作；失败保留草稿。部署状态只读取公开 Actions API，无需增加 Actions 权限；限流时提供进度链接，不谎报成功。
 
 前端由此 Worker 同源代理 GitHub Pages 的 `/studio/`、`/vendor/`、`/uploads/` 静态资源，避免跨域登录 cookie。GitHub Pages 的工作台是本机模式，草稿不会跨域自动迁移，请下载后导入云端。本机缓存包含自己的草稿，公用电脑不建议使用。
