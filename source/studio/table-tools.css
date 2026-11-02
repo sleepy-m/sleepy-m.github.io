@@ -1,44 +1,25 @@
-/* The "<!-- more -->" divider reads as a rule, not as raw HTML.
-   Vditor keeps the comment in an editable <pre> inside its IR node, so the
-   neutral styles have to override .vditor-ir pre (hence the !important pair). */
+/* Render Hexo's more marker as a quiet divider in the writing canvas. */
 .studio-more{display:block!important;max-height:none!important;height:auto!important;min-height:0!important;overflow:visible!important;margin:0!important;padding:2px 0!important;font-size:10px!important;letter-spacing:.12em;color:#a8ac9c!important;background:transparent!important;border:0!important;box-shadow:none!important;line-height:1.6!important;white-space:nowrap;text-align:center;cursor:default}
 .studio-more>*{display:none!important}
 .studio-more::before{content:"";display:block;border-top:1px dashed #d9dccd;margin-bottom:6px}
 .studio-more::after{content:"摘要分隔 · 首页只显示到这里";display:block;font-size:10px;letter-spacing:.12em;color:#a8ac9c}
 .vditor-ir__node:has(> .studio-more){display:block!important;margin:22px 0!important;min-height:0!important;border:0!important}
 
-/* 表格：右上角一个明确的「编辑表格」按钮，不再依赖细窄的竖条。 */
-.vditor-reset table{position:relative}
-.table-edit-launch{position:absolute;z-index:9;display:inline-flex;align-items:center;gap:5px;min-width:96px;height:30px;padding:0 12px;border:1px solid var(--accent-line);border-radius:8px;background:var(--paper);color:var(--accent);font-size:12px;font-weight:550;line-height:1;white-space:nowrap;cursor:pointer;box-shadow:var(--shadow-2);transition:background .15s,color .15s,box-shadow .15s,border-color .15s;touch-action:manipulation}
-.table-edit-launch::before{content:"✎";font-size:13px}
-.table-edit-launch:hover,.table-edit-launch:focus-visible{background:var(--accent);color:var(--paper);border-color:var(--accent);box-shadow:var(--shadow-3);outline:none}
-.table-edit-launch[hidden]{display:none}
-@media(max-width:760px){.table-edit-launch{min-width:84px;height:28px;padding:0 10px;font-size:11.5px}}
-.table-dialog{width:min(1040px,96vw);max-height:90dvh;padding:20px 22px;border:1px solid var(--line);border-radius:14px;background:var(--paper);color:var(--ink);box-shadow:0 26px 90px #17251d40;display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain}
-.table-dialog::backdrop{background:#1b241e2e}
-.table-dialog h2{margin:0;font-size:17px;font-weight:650;flex:0 0 auto}
-.table-dialog>p{font-size:11.5px;color:var(--muted);margin:6px 0 8px;line-height:1.6;flex:0 0 auto}
-.table-actions{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 12px;flex:0 0 auto}
-.table-actions button{border:1px solid var(--line);font-size:11.5px;padding:5px 10px;color:var(--ink-soft)}
-.table-actions button:hover{background:var(--accent-soft);border-color:#cbd6bf;color:var(--accent-strong)}
-.table-grid-viewport{flex:0 0 auto;min-height:0;max-height:55dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border:1px solid var(--line);border-radius:8px;background:#fff}
-.table-grid{border-collapse:collapse;table-layout:fixed;margin:0}
-.table-grid td,.table-grid th{position:relative;border:1px solid var(--line);padding:5px;min-width:72px;vertical-align:top}
-.table-grid th{background:#f4f6ec;font-weight:600}
-.table-grid .selected{outline:2px solid #7e9a72;outline-offset:-2px}
-.table-grid td:focus-within,.table-grid th:focus-within{background:#fbfdf6}
-.table-grid textarea{box-sizing:border-box;width:100%;display:block;border:0;resize:none;background:transparent;font:13px/1.55 var(--ui);color:inherit;min-height:32px;padding:2px 3px;outline:0;overflow:auto;overscroll-behavior:contain;white-space:pre-wrap;overflow-wrap:anywhere}
-.column-resize{position:absolute;right:-4px;top:0;bottom:0;width:9px;cursor:col-resize;z-index:3;touch-action:none}
-.row-resize{position:absolute;left:0;right:0;bottom:-4px;height:9px;cursor:row-resize;z-index:4;touch-action:none}
-.column-resize:hover,.column-resize:focus,.row-resize:hover,.row-resize:focus{background:#8aa87b80}
-.table-dialog-footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:14px}
-.table-selection{font-size:11px;color:var(--muted);margin-right:auto}
-.table-dialog-footer button{border:1px solid var(--line);font-size:12.5px;padding:7px 14px}
-.table-dialog-footer .primary{border-color:transparent}
-@media(max-width:600px){
- .table-dialog{padding:14px;width:96vw;max-height:92dvh}
- .table-grid-viewport{max-height:58dvh}
- .table-dialog-footer{flex-wrap:wrap}
- .table-selection{width:100%}
- .table-actions button{font-size:11px;padding:5px 8px}
+/* Feishu-inspired contextual table tools stay beside the active cell. */
+.table-context-tools{position:fixed;z-index:86;display:flex;align-items:center;gap:3px;max-width:min(94vw,660px);padding:5px;background:var(--paper);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow-3);animation:pop .12s ease-out;white-space:nowrap;overflow-x:auto;scrollbar-width:none}
+.table-context-tools::-webkit-scrollbar{display:none}
+.table-context-tools[hidden]{display:none}
+.table-context-button{flex:0 0 auto;padding:5px 9px;border-radius:7px;font-size:11.5px;font-weight:550;color:var(--ink-2);transition:background .12s,color .12s}
+.table-context-button:hover:not(:disabled){background:var(--accent-soft);color:var(--accent-strong)}
+.table-context-button:disabled{opacity:.4;cursor:not-allowed}
+.table-context-position{flex:0 0 auto;padding:0 8px;border-left:1px solid var(--line-2);font-size:10.5px;color:var(--muted)}
+.table-column-handles{position:fixed;inset:0;z-index:85;pointer-events:none}
+.table-column-handle{position:fixed;width:9px;min-width:9px;padding:0;transform:translateX(-50%);pointer-events:auto;touch-action:none;cursor:col-resize;background:transparent;border:0;border-radius:99px;opacity:.38;transition:background .12s,opacity .12s}
+.table-column-handle:hover,.table-column-handle:focus-visible{background:var(--accent);opacity:.7;outline:0}
+.vditor-reset td:focus-within,.vditor-reset th:focus-within{box-shadow:inset 0 0 0 1.5px var(--accent-line)}
+@media(max-width:760px){
+ .table-context-tools{max-width:96vw;gap:1px;padding:4px}
+ .table-context-button{padding:7px 8px;font-size:11px}
+ .table-context-position{padding:0 5px;font-size:10px}
+ .table-column-handle{width:14px;min-width:14px;opacity:.24}
 }
