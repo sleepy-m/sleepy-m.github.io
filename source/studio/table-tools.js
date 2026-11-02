@@ -34,9 +34,9 @@
 
  window.StudioTableTools={normalizeSeparators,tables,mount({root,getValue,setValue,onChange,isBusy}){
   const toolbar=document.createElement('div');toolbar.className='table-context-tools';toolbar.setAttribute('role','toolbar');toolbar.setAttribute('aria-label','当前单元格的表格操作');toolbar.hidden=true;
-  const handles=document.createElement('div');handles.className='table-column-handles';handles.setAttribute('aria-hidden','true');
+  const handles=document.createElement('div');handles.className='table-column-handles';handles.setAttribute('role','group');handles.setAttribute('aria-label','表格行列选择与尺寸调整');
   document.body.append(toolbar,handles);
-  let current={index:-1,row:0,col:0,table:null},anchor=null,selected={r0:0,r1:0,c0:0,c1:0},layoutTimer=0,placeTimer=0,dragging=false,handleTable=null,handleList=[];
+  let current={index:-1,row:0,col:0,table:null},anchor=null,selected={r0:0,r1:0,c0:0,c1:0},layoutTimer=0,placeTimer=0,dragging=false,selectionDrag=null,handleTable=null,handleList=[];
   const visibleTables=()=>[...root.querySelectorAll('table')].filter(table=>table.getClientRects().length);
   function domTableIndex(table){return visibleTables().indexOf(table);}
   function cellAt(node){
@@ -60,6 +60,18 @@
    for(const row of table.rows)for(const cell of row.cells)cell.classList.remove('studio-table-selected');
    if(selected.index!==current.index)return;
    for(let row=selected.r0;row<=selected.r1;row++)for(let col=selected.c0;col<=selected.c1;col++)table.rows[row]?.cells[col]?.classList.add('studio-table-selected');
+  }
+  function selectHeader(spec,extendTo=spec.index){
+   const table=handleTable,index=domTableIndex(table);if(!table||index<0)return;
+   const axis=spec.axis==='select-row'?'row':'col';
+   const row=axis==='row'?spec.index:clamp(current.row,0,table.rows.length-1);
+   const col=axis==='col'?spec.index:clamp(current.col,0,(table.rows[0]?.cells.length||1)-1);
+   current={index,row,col,table};
+   anchor={index,row:axis==='row'?spec.index:0,col:axis==='col'?spec.index:0};
+   selected=axis==='row'
+    ?{index,r0:Math.min(spec.index,extendTo),r1:Math.max(spec.index,extendTo),c0:0,c1:(table.rows[0]?.cells.length||1)-1}
+    :{index,r0:0,r1:table.rows.length-1,c0:Math.min(spec.index,extendTo),c1:Math.max(spec.index,extendTo)};
+   paintSelection(table);place();
   }
   function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
   function dimensions(index,domTable){
@@ -152,11 +164,19 @@
   function buildHandles(table,index,widths,heights){
    const head=table.rows[0];if(!head)return;
    const specs=[];
+   for(let col=0;col<head.cells.length;col++)specs.push({key:'sc'+col,axis:'select-col',index:col});
+   for(let row=0;row<table.rows.length;row++)specs.push({key:'sr'+row,axis:'select-row',index:row});
    for(let col=0;col<head.cells.length-1;col++)specs.push({key:'c'+col,axis:'x',index:col});
    for(let row=0;row<table.rows.length;row++)specs.push({key:'r'+row,axis:'y',index:row});
    if(handleTable!==table||handleList.map(item=>item.key).join(',')!==specs.map(item=>item.key).join(',')){clearHandles();handleTable=table;}
    const positionHandle=(handle,spec)=>{
-    if(spec.axis==='x'){
+    if(spec.axis==='select-col'){
+     const cell=head.cells[spec.index].getBoundingClientRect();
+     handle.style.left=(cell.left+cell.width/2-9)+'px';handle.style.top=(table.getBoundingClientRect().top-11)+'px';handle.style.width='18px';handle.style.height='18px';
+    }else if(spec.axis==='select-row'){
+     const row=table.rows[spec.index].getBoundingClientRect(),bounds=table.getBoundingClientRect();
+     handle.style.left=(bounds.left-12)+'px';handle.style.top=(row.top+row.height/2-9)+'px';handle.style.width='18px';handle.style.height='18px';
+    }else if(spec.axis==='x'){
      const edge=head.cells[spec.index].getBoundingClientRect(),bounds=table.getBoundingClientRect();
      handle.style.left=(edge.right-4)+'px';handle.style.top=bounds.top+'px';handle.style.height=bounds.height+'px';handle.style.width='9px';
     }else{
@@ -167,11 +187,19 @@
    if(handleList.length===specs.length){handleList.forEach((item,i)=>positionHandle(item.element,specs[i]));return;}
    for(const spec of specs){
     const handle=document.createElement('button');handle.type='button';
-    handle.className=spec.axis==='x'?'table-column-handle':'table-row-handle';
-    handle.title=spec.axis==='x'?'拖动调整列宽':'拖动调整行高';
-    handle.setAttribute('aria-label',spec.axis==='x'?`拖动调整第 ${spec.index+1} 列宽`:`拖动调整第 ${spec.index+1} 行高`);
-    handle.setAttribute('aria-orientation',spec.axis==='x'?'vertical':'horizontal');handle.setAttribute('role','separator');
+    const isSelector=spec.axis==='select-col'||spec.axis==='select-row';
+    handle.className=isSelector?'table-select-handle '+(spec.axis==='select-col'?'table-select-column':'table-select-row'):spec.axis==='x'?'table-column-handle':'table-row-handle';
+    handle.title=spec.axis==='select-col'?`选择第 ${spec.index+1} 列（拖动可多选）`:spec.axis==='select-row'?`选择第 ${spec.index+1} 行（拖动可多选）`:spec.axis==='x'?'拖动调整列宽':'拖动调整行高';
+    handle.setAttribute('aria-label',spec.axis==='select-col'?`选择第 ${spec.index+1} 列`:spec.axis==='select-row'?`选择第 ${spec.index+1} 行`:spec.axis==='x'?`拖动调整第 ${spec.index+1} 列宽`:`拖动调整第 ${spec.index+1} 行高`);
+    if(!isSelector){handle.setAttribute('aria-orientation',spec.axis==='x'?'vertical':'horizontal');handle.setAttribute('role','separator');}
     positionHandle(handle,spec);handles.append(handle);handleList.push({key:spec.key,element:handle});
+    if(isSelector){
+     handle.onpointerdown=event=>{
+      event.preventDefault();event.stopPropagation();selectionDrag={axis:spec.axis,start:spec.index,table,index};selectHeader(spec);
+     };
+     handle.onclick=event=>{if(event.detail===0)selectHeader(spec);};
+     continue;
+    }
     handle.onpointerdown=event=>{
      event.preventDefault();event.stopPropagation();dragging=true;
      const start=spec.axis==='x'?event.clientX:event.clientY;
@@ -202,6 +230,15 @@
     };
    }
   }
+  function selectionHandleAtPoint(event){
+   const element=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('.table-select-handle');
+   if(!element||!handles.contains(element)||!selectionDrag)return;
+   const item=handleList.find(entry=>entry.element===element);
+   if(!item||!item.key.startsWith(selectionDrag.axis==='select-row'?'sr':'sc'))return;
+   const next=Number(item.key.slice(2));
+   if(Number.isInteger(next))selectHeader({axis:selectionDrag.axis,index:selectionDrag.start},next);
+  }
+  function finishSelectionDrag(){selectionDrag=null;document.removeEventListener('pointermove',selectionHandleAtPoint,true);document.removeEventListener('pointerup',finishSelectionDrag,true);document.removeEventListener('pointercancel',finishSelectionDrag,true);}
   function place(){
    if(isBusy()||!current.table?.isConnected){toolbar.hidden=true;clearHandles();return;}
    const table=current.table,rect=table.getBoundingClientRect();
@@ -245,6 +282,10 @@
   });
   root.addEventListener('focusin',event=>{const hit=cellAt(event.target);if(hit)choose(hit);});
   root.addEventListener('keyup',schedulePlace);
+  document.addEventListener('pointerdown',event=>{
+   if(!event.target.closest?.('.table-select-handle'))return;
+   document.addEventListener('pointermove',selectionHandleAtPoint,true);document.addEventListener('pointerup',finishSelectionDrag,true);document.addEventListener('pointercancel',finishSelectionDrag,true);
+  },true);
   root.addEventListener('keydown',event=>{
    if(event.key!=='Tab'||event.defaultPrevented)return;
    const hit=cellAt(event.target)||selectionCell();if(!hit)return;

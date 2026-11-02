@@ -14,6 +14,10 @@
 .table-context-button:disabled{opacity:.4;cursor:not-allowed}
 .table-context-position{flex:0 0 auto;padding:0 8px;border-left:1px solid var(--line-2);font-size:10.5px;color:var(--muted)}
 .table-column-handles{position:fixed;inset:0;z-index:85;pointer-events:none}
+.table-select-handle{position:fixed;display:grid;place-items:center;padding:0;pointer-events:auto;touch-action:none;cursor:pointer;border:0;border-radius:50%;background:transparent;opacity:.42;transition:opacity .12s,background .12s}
+.table-select-handle::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 2px color-mix(in srgb,var(--paper) 92%,transparent);transition:transform .12s,background .12s}
+.table-select-handle:hover,.table-select-handle:focus-visible,.table-select-handle:active{opacity:1;background:var(--accent-soft);outline:0}
+.table-select-handle:hover::before,.table-select-handle:focus-visible::before,.table-select-handle:active::before{transform:scale(1.25);background:var(--accent-strong)}
 .table-column-handle{position:fixed;width:9px;min-width:9px;padding:0;transform:translateX(-50%);pointer-events:auto;touch-action:none;cursor:col-resize;background:transparent;border:0;border-radius:99px;opacity:.38;transition:background .12s,opacity .12s}
 .table-column-handle:hover,.table-column-handle:focus-visible{background:var(--accent);opacity:.7;outline:0}
 .table-row-handle{position:fixed;min-height:9px;height:9px;padding:0;transform:translateY(-50%);pointer-events:auto;touch-action:none;cursor:row-resize;background:transparent;border:0;border-radius:99px;opacity:.26;transition:background .12s,opacity .12s}
