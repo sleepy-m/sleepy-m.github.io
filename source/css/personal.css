@@ -8,3 +8,6 @@ html[data-user-color-scheme=dark] .markdown-body h2{border-color:#384c60}html[da
 .page-content{font-size:17px;line-height:1.95}.page-content h2{margin-top:2em;color:var(--post-heading-color)}pre,code,.code-wrapper{font-family:"JetBrains Mono",Consolas,monospace!important;font-variant-ligatures:none}.page-content table{display:block;max-width:100%;overflow:auto}.page-content td,.page-content th{padding:.5rem .8rem}.page-content pre{overflow-x:auto;border-radius:9px;padding:1rem}.page-content .code-wrapper{margin:1.4rem 0}
 @media(max-width:767px){.markdown-body{font-size:16px;line-height:1.9}#board{border-radius:12px}.cursor-dot,.cursor-ring{display:none}#navbar .nav-item:last-of-type .nav-link{border:0;margin:0;padding:.5rem 0}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto!important}.cursor-dot,.cursor-ring{display:none}*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Nested ordered lists use lettered subitems in the published blog. */
+.markdown-body ol ol{list-style-type:lower-alpha}.markdown-body ol ol ol{list-style-type:lower-roman}

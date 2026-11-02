@@ -855,30 +855,6 @@
     const block = currentBlock();
     return block ? block.getBoundingClientRect() : {left: innerWidth / 2, top: innerHeight / 3, bottom: innerHeight / 3};
   }
-  function atBlockStart() {
-    const block = currentBlock();
-    if (!block) {
-      // Empty document: accept a caret that sits in the editable area.
-      const selection = getSelection();
-      const root = editorRoot();
-      if (!selection || !selection.rangeCount || !root) return false;
-      const node = selection.anchorNode;
-      return !!node && (node === root || root.contains(node));
-    }
-    const selection = getSelection();
-    if (!selection.rangeCount) return false;
-    const range = selection.getRangeAt(0);
-    if (range.startContainer !== block && !block.contains(range.startContainer)) {
-      const rects = range.getClientRects();
-      return !rects.length;
-    }
-    if (range.startContainer.nodeType !== 3 && range.startOffset === 0) return true;
-    const before = document.createRange();
-    before.selectNodeContents(block);
-    try { before.setEnd(range.startContainer, range.startOffset); } catch { return false; }
-    const text = before.toString().replace(/\u200b/g, '').trim();
-    return text === '' || /^([-*+]|\d+\.)\s?$/.test(text);
-  }
   function insertSnippet(item) {
     if (!item) return;
     const root = editorRoot();
@@ -903,7 +879,7 @@
     menu.setAttribute('role', 'listbox');
     menu.setAttribute('aria-label', '插入内容');
     document.body.append(menu);
-    let open = false, query = '', index = 0, filtered = [], composing = false;
+    let open = false, query = '', index = 0, filtered = [], composing = false, navigated = false;
 
     function render() {
       filtered = Commands.search(query);
@@ -972,8 +948,10 @@
       open = true;
       query = '';
       index = 0;
+      navigated = false;
       render();
     }
+    function openFromButton() { openMenu(); navigated = true; }
     document.addEventListener('keydown', event => {
       if (!open || event.isComposing) return;
       const key = event.key;
@@ -982,6 +960,7 @@
       if (key === 'ArrowDown' || key === 'ArrowUp') {
         event.preventDefault(); event.stopPropagation();
         if (!filtered.length) return;
+        navigated = true;
         index = (index + (key === 'ArrowDown' ? 1 : -1) + filtered.length) % filtered.length;
         render();
         return;
@@ -995,6 +974,9 @@
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (key.length === 1) {
+        // Quick typing after slash means literal text. Keep the current key
+        // for the editor and insert the slash that originally opened the menu.
+        if (!navigated) { close(true); return; }
         event.preventDefault(); event.stopPropagation();
         query += key;
         index = 0;
@@ -1024,10 +1006,11 @@
       if (open && (event.target === document || event.target === document.documentElement)) close(false);
     }, true);
     return {
-      open: openMenu,
+      open: openFromButton,
       isOpen: () => open,
       close,
       intercept: event => {
+        if (event.defaultPrevented) return true;
         const root = editorRoot();
         const target = event.target;
         const inEditor = !!root && target instanceof Node && root.contains(target);
@@ -1048,7 +1031,10 @@
           }
         }
         if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return false;
-        if (!atBlockStart()) return false;
+        const targetElement = target.nodeType === 3 ? target.parentElement : target;
+        // Slash commands work from any prose position. Keep / literal inside
+        // code and table cells, where it is commonly part of the content.
+        if (targetElement?.closest?.('td, th, pre:not(.vditor-reset), code')) return false;
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -1067,6 +1053,116 @@
       for (const file of input.files || []) await insertImage(file);
     };
     input.click();
+  }
+
+  function attachEditorAssist(mount) {
+    const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`'};
+    mount.addEventListener('keydown', event => {
+      if (handleListTab(event)) return;
+      const root = editorRoot();
+      const selection = getSelection();
+      if (!root || !selection?.rangeCount) return;
+      const node = selection.anchorNode;
+      const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      if (!element?.closest) return;
+      const range = selection.getRangeAt(0);
+
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'a') {
+        const block = element.closest('pre, table, blockquote, ul, ol, figure');
+        if (!block || !root.contains(block)) return;
+        const compact = value => String(value || '').replace(/\s+/g, '');
+        const selectedText = compact(range.toString());
+        const sameSelection = !!selectedText && selectedText === compact(block.innerText || block.textContent);
+        const target = sameSelection ? root : block;
+        const next = document.createRange();
+        next.selectNodeContents(target);
+        selection.removeAllRanges(); selection.addRange(next);
+        event.preventDefault(); event.stopImmediatePropagation();
+        return;
+      }
+
+      if (event.key === 'Backspace' && range.collapsed && node?.nodeType === Node.TEXT_NODE) {
+        const offset = selection.anchorOffset;
+        const before = node.data[offset - 1], after = node.data[offset];
+        if (Object.entries(pairs).some(([open, close]) => before === open && after === close)) {
+          range.setStart(node, offset - 1); range.setEnd(node, offset + 1); range.deleteContents();
+          root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'deleteContentBackward', data: null}));
+          event.preventDefault(); event.stopImmediatePropagation(); changed(); return;
+        }
+      }
+
+      if (event.key.length === 1 && pairs[event.key] && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (!range.collapsed) return;
+        const next = node?.nodeType === Node.TEXT_NODE ? node.data[selection.anchorOffset] : '';
+        if (event.key === pairs[event.key] && next === event.key) {
+          const caret = document.createRange();
+          if (node?.nodeType === Node.TEXT_NODE) caret.setStart(node, selection.anchorOffset + 1);
+          else caret.setStart(node, Math.min(node.childNodes.length, selection.anchorOffset + 1));
+          caret.collapse(true); selection.removeAllRanges(); selection.addRange(caret);
+          event.preventDefault(); event.stopImmediatePropagation(); return;
+        }
+        range.deleteContents();
+        const pair = document.createTextNode(event.key + pairs[event.key]);
+        range.insertNode(pair);
+        const inside = document.createRange(); inside.setStart(pair, 1); inside.collapse(true);
+        selection.removeAllRanges(); selection.addRange(inside);
+        root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: event.key + pairs[event.key]}));
+        event.preventDefault(); event.stopImmediatePropagation(); changed();
+      }
+    }, true);
+    function handleListTab(event) {
+      if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return false;
+      const selection = getSelection();
+      if (!selection?.rangeCount) return false;
+      const anchorNode = selection.anchorNode;
+      const anchorElement = anchorNode?.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode;
+      const li = anchorElement?.closest?.('li');
+      const root = editorRoot();
+      if (!li || !root?.contains(li) || li.closest('td, th, pre:not(.vditor-reset)')) return false;
+
+      const clean = value => String(value || '').replace(/\u200b/g, '').replace(/\s+/g, ' ').trim();
+      const visibleText = clean(li.innerText || li.textContent);
+      const lines = editor.getValue().split('\n');
+      const candidates = [];
+      lines.forEach((line, lineIndex) => {
+        const match = line.match(/^(\s*)([-+*]|\d+[.)])\s+(?:\[[ xX]\]\s*)?(.*)$/);
+        if (!match) return;
+        const text = clean(match[3].replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`~]/g, ''));
+        if (text === visibleText || (text && visibleText && (text.includes(visibleText) || visibleText.includes(text)))) {
+          candidates.push({lineIndex, indent: match[1].length});
+        }
+      });
+      if (!candidates.length) return false;
+      const allItems = [...root.querySelectorAll('li')];
+      const matchingBefore = allItems.slice(0, allItems.indexOf(li)).filter(item => clean(item.innerText || item.textContent) === visibleText).length;
+      const target = candidates[Math.min(matchingBefore, candidates.length - 1)];
+      const delta = event.shiftKey ? -2 : 2;
+      if (event.shiftKey && target.indent < 2) { event.preventDefault(); return true; }
+      const nextLines = lines.slice();
+      for (let lineIndex = target.lineIndex; lineIndex < nextLines.length; lineIndex++) {
+        const current = nextLines[lineIndex];
+        if (lineIndex !== target.lineIndex && current.trim()) {
+          const indent = current.match(/^\s*/)[0].length;
+          if (indent <= target.indent) break;
+        }
+        if (!current.trim()) continue;
+        if (lineIndex === target.lineIndex) nextLines[lineIndex] = ' '.repeat(Math.max(0, target.indent + delta)) + current.trimStart();
+        else if (current.match(/^\s*([-+*]|\d+[.)])\s/)) nextLines[lineIndex] = ' '.repeat(Math.max(0, current.match(/^\s*/)[0].length + delta)) + current.trimStart();
+      }
+      event.preventDefault(); event.stopImmediatePropagation();
+      editor.setValue(nextLines.join('\n'));
+      changed();
+      setTimeout(() => {
+        const live = editorRoot();
+        const match = [...(live?.querySelectorAll('li') || [])].find(item => clean(item.innerText || item.textContent) === visibleText);
+        if (!match) return;
+        live.focus();
+        const caret = document.createRange(); caret.selectNodeContents(match); caret.collapse(true);
+        const currentSelection = getSelection(); currentSelection.removeAllRanges(); currentSelection.addRange(caret);
+      }, 100);
+      return true;
+    }
+    return {handleListTab};
   }
 
   // -------------------------------------------------------------------- dialogs
@@ -1089,7 +1185,7 @@
   function showShortcuts() {
     const rows = [
       ['Ctrl / ⌘ + S', '立即保存（登录后同时同步云端）'],
-      ['/', '在行首插入标题、表格、公式、图片……'],
+      ['/', '在正文任意位置打开插入菜单；直接继续输入会写入普通斜杠'],
       ['选中文字', '出现格式浮条：加粗、标题、列表、链接'],
       ['Ctrl / ⌘ + B / I / K', '加粗 / 斜体 / 链接'],
       ['Ctrl / ⌘ + Z / ⇧Z', '撤销 / 重做'],
@@ -1538,7 +1634,7 @@
     document.addEventListener('drop', handleDrop);
   }
 
-  let slash = null;
+  let slash = null, editorAssist = null;
   function startEditor() {
     fillFields();
     try {
@@ -1555,7 +1651,7 @@
         typewriterMode: !!prefs.typer,
         toolbarConfig: {hide: true},
         toolbar: ['bold'],
-        preview: {math: {engine: 'KaTeX'}, hljs: {style: 'github'}, markdown: {sanitize: true}},
+        preview: {math: {engine: 'KaTeX'}, hljs: {style: 'github'}, markdown: {sanitize: true, codeBlockPreview: true}},
         upload: {
           accept: 'image/png,image/jpeg,image/webp,image/gif',
           handler: async files => { for (const file of files) await insertImage(file); return null; },
@@ -1609,9 +1705,13 @@
       },
     });
     const root = $('editor');
+    editorAssist = attachEditorAssist(root);
     // The document sees every key first; the menu only consumes editing keys
     // while it is open, so normal typing and selections are never interrupted.
-    document.addEventListener('keydown', event => { if (slash) slash.intercept(event); }, true);
+    document.addEventListener('keydown', event => {
+      if (editorAssist?.handleListTab(event)) return;
+      if (slash) slash.intercept(event);
+    }, true);
     function rewriteClipboard(event) {
       const text = event.clipboardData?.getData('text/plain') || '';
       const parsed = splitDocument(text);
