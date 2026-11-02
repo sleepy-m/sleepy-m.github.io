@@ -10,7 +10,7 @@
    if(fm){if(!fence)fence=fm[1];else if(fm[1][0]===fence[0]&&fm[1].length>=fence.length)fence=null;offset+=line.length+1;continue;}
    if(fence){offset+=line.length+1;continue;}
    const next=lines[i+1];
-   if(next&&line.includes('|')&&cells(next).every(s=>/^:?-{3,}:?$/.test(s))&&cells(next).length===cells(line).length){
+   if(next&&line.includes('|')&&cells(next).every(s=>/^:?-+:?$/.test(s))&&cells(next).length===cells(line).length){
     const start=offset,rows=[cells(line)],align=cells(next);let j=i+2;
     while(j<lines.length&&lines[j].trim()&&lines[j].includes('|')){rows.push(cells(lines[j]));j++;}
     const width=align.length;for(const row of rows){while(row.length<width)row.push('');if(row.length>width)row.length=width;}
@@ -22,7 +22,24 @@
    }else offset+=line.length+1;
   }return found;
  }
- window.StudioTableTools={tables,mount({root,getValue,setValue,onChange,isBusy}){
+  // Markdown requires three dashes per column; the editor may shorten them.
+  // Markdown needs "---" per column; normalise any shortened or padded rule row.
+  function normalizeSeparators(value) {
+   if (!value || !value.includes('|')) return value;
+   return value.split('\n').map(line => {
+    if (!line.trim().startsWith('|')) return line;
+    const cellsOfLine = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+    if (!cellsOfLine.length) return line;
+    const isRule = cellsOfLine.every(cell => /^\s*:?-+:?\s*$/.test(cell));
+    if (!isRule) return line;
+    return '| ' + cellsOfLine.map(cell => {
+     const text = cell.trim();
+     return (text.startsWith(':') ? ':' : '') + '---' + (text.endsWith(':') ? ':' : '');
+    }).join(' | ') + ' |';
+   }).join('\n');
+  }
+
+ window.StudioTableTools={normalizeSeparators:normalizeSeparators,tables,mount({root,getValue,setValue,onChange,isBusy}){
   // A thin handle glued to the right edge of the table that holds the caret.
   const launch=document.createElement('button');
   launch.type='button';launch.className='table-edit-launch';launch.textContent='编辑';
@@ -167,7 +184,9 @@
     if(isBusy()||getValue()!==original){info.textContent='正文已在其他操作中变化，请取消后重新打开，避免覆盖。';return;}
     const escape=s=>s.replace(/\r?\n/g,'<br>').replace(/(?<!\\)\|/g,'\\|');
     const line=r=>'| '+r.map(escape).join(' | ')+' |';
-    const content='<!-- studio-table-layout '+JSON.stringify({widths,heights})+' -->\n'+[line(rows[0]),line(align),...rows.slice(1).map(line)].join('\n');
+    // One rule per column, written as "---" with alignment kept.
+    const rule=cell=>{const left=/^:/.test(cell),right=/:$/.test(cell);return (left?':':'')+'---'+(right?':':'');};
+    const content='<!-- studio-table-layout '+JSON.stringify({widths,heights})+' -->\n'+[line(rows[0]),line(align.map(rule)),...rows.slice(1).map(line)].join('\n');
     setValue(original.slice(0,table.start)+content+original.slice(table.end));
     onChange();
     dialog.close();
@@ -185,7 +204,7 @@
    const visible=[...root.querySelectorAll('table')].filter(t=>t.getClientRects().length);
    const index=visible.indexOf(table);
    const picked=index>=0?parsed[index]:parsed[0];
-   if(!picked){alert('当前表格不是可识别的 Markdown 表格，请切换编辑模式后重试。');return;}
+   if(!picked){alert('没找到可编辑的表格。请把光标放到表格里，或切到“源码”模式后再试。');return;}
    editor(original,picked);
   };
   updateLayout();

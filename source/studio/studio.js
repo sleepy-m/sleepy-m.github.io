@@ -189,6 +189,20 @@
       syncTimer = setTimeout(() => { flushEdit(); cloudSave().catch(() => {}); }, 1200);
     }
   }
+  // Ask the table helper to restore three-dash separators in the stored value.
+  function normalizeTables() {
+    const helper = window.StudioTableTools;
+    if (!helper || !helper.normalizeSeparators || !editor) return;
+    const current = editor.getValue();
+    const fixed = helper.normalizeSeparators(current);
+    if (fixed === current) return;
+    const caret = getSelection();
+    editor.setValue(fixed);
+    if (caret && caret.rangeCount) {
+      // Keep the user roughly where they were; exact caret is restored on next input.
+    }
+  }
+
   function flushEdit() {
     if (!editTimer) return;
     clearTimeout(editTimer);
@@ -393,12 +407,12 @@
   // ------------------------------------------------------------- editor events
   function changed() {
     if (!ready || busy) return;
-    scheduleBlankRepair();
     clearTimeout(savedTimer);
     setSaveState('dirty', '正在保存…');
     clearTimeout(editTimer);
     editTimer = setTimeout(() => {
       editTimer = 0;
+      normalizeTables();
       commit();
       updateStats();
       renderListSoon();
@@ -413,35 +427,6 @@
   }
   // Vditor drops a second Enter on an otherwise empty line, which makes it
   // impossible to add spacing. After typing pauses, put that blank line back.
-  let blankWanted = -1;
-  let blankTimer = 0;
-  function noteEnter() {
-    const block = currentBlock();
-    if (!block) return;
-    if (block.textContent.replace(/\u200B/g, '').trim()) return;
-    blankWanted = textLength(editorRoot(), block, 0);
-  }
-  function scheduleBlankRepair() {
-    if (blankWanted < 0) return;
-    clearTimeout(blankTimer);
-    blankTimer = setTimeout(repairBlank, 700);
-  }
-  function repairBlank() {
-    blankTimer = 0;
-    if (blankWanted < 0 || !ready || busy) return;
-    const wanted = blankWanted;
-    blankWanted = -1;
-    const body = editor.getValue();
-    const lineEnd = body.indexOf('\n', wanted);
-    const at = lineEnd < 0 ? body.length : lineEnd;
-    // Only act when that spot still holds the caret and has no blank line yet.
-    if (body.slice(at, at + 2) === '\n\n' || body.slice(at - 1, at + 1) === '\n\n') return;
-    editor.setValue(body.slice(0, at) + '\n' + body.slice(at));
-    setCaret(at + 1);
-    commit();
-    persist();
-  }
-
   function saveNow() {
     if (!ready) return;
     flushEdit();
@@ -1562,7 +1547,6 @@
         // untouched, otherwise Vditor re-renders and the selection collapses.
         keydown: event => {
           if (slash && slash.intercept(event)) return;
-          if (event.key === 'Enter' && !event.isComposing && !event.shiftKey) noteEnter();
         },
         after: () => {
           ready = true;
