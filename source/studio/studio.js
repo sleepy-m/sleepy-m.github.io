@@ -801,10 +801,7 @@
   // rebuilds one, so ask the live caret where it actually lives.
   function editorRoot() {
     const mount = $('editor');
-    const live = mount && mount.querySelector('.vditor-ir .vditor-reset, .vditor-wysiwyg .vditor-reset, .vditor-sv .vditor-reset');
-    if (live) return live;
-    const nodes = mount ? [...mount.querySelectorAll('.vditor-reset')] : [];
-    return nodes.find(node => node.isConnected && node.getClientRects().length) || null;
+    return (mount && mount.querySelector('.vditor-ir .vditor-reset, .vditor-wysiwyg .vditor-reset, .vditor-sv .vditor-reset')) || null;
   }
 
   function currentBlock() {
@@ -1139,63 +1136,44 @@
   }
 
   // Offsets of the selection the bubble is about to act on.
-  let bubbleSelection = null;
-  // Page rect of the selection bar, used when the selection is already gone.
-  let bubbleRect = null;
+  // Range captured by the format bar, waiting to be applied.
+  let pendingSelection = null;
 
   // ---------------------------------------------------------- selection format
-  // Markers Vditor shows while a block is being edited; they never belong to
-  // the Markdown value, so character offsets must skip them.
-  // Hidden helpers (previews, the raw HTML of comments) stay out of the count;
-  // visible marker characters such as the "#" of a heading are part of the
-  // Markdown value, so they are counted like plain text.
-  const MARKER_SELECTOR = '[data-type="html-block"], .vditor-ir__marker--pre, .vditor-ir__preview, .vditor-wysiwyg__preview';
-
-  // Counts characters between the start of the editable area and a DOM point.
-  function textLength(root, stopNode, stopOffset) {
-    let length = 0;
-    for (const segment of walkText(root, stopNode)) length += segment.length;
-    return length + Math.max(0, Math.min(stopOffset || 0, (stopNode && stopNode.data ? stopNode.data.length : 0)));
-  }
-
-  // Yields the plain-text nodes in document order, stopping before stopNode.
-  function* walkText(root, stopNode) {
-    let stopped = false;
-    const walk = function* (node) {
+  // The document's plain text, which is what Vditor itself counts. Offsets are
+  // measured against this so a selection maps onto the Markdown value directly.
+  function walkTextNodes(root) {
+    const nodes = [];
+    const walk = node => {
       for (const child of node.childNodes) {
-        if (stopped) return;
-        if (child === stopNode) { stopped = true; return; }
-        if (child.nodeType === 3) { yield child; continue; }
-        if (child.nodeType !== 1) continue;
-        if (child.matches && child.matches(MARKER_SELECTOR)) continue;
-        yield* walk(child);
+        if (child.nodeType === 3) nodes.push(child);
+        else if (child.nodeType === 1) walk(child);
       }
     };
-    yield* walk(root);
+    if (root) walk(root);
+    return nodes;
   }
 
-  // Offsets of the current selection in the Markdown value. When Vditor has
-  // already collapsed the selection, the paragraph under the given rect is used.
-  function selectionOffsets(rect, preferred) {
-    const root = editorRoot();
-    if (!root) return null;
-    const selection = getSelection();
-    const candidates = [];
-    if (preferred) candidates.push(preferred);
-    if (selection && selection.rangeCount && !selection.isCollapsed) candidates.push(selection.getRangeAt(0));
-    for (const range of candidates) {
-      if (!root.contains(range.startContainer)) continue;
-      const start = textLength(root, range.startContainer, range.startOffset);
-      const end = textLength(root, range.endContainer, range.endOffset);
-      if (end > start) return {start, end};
+  function textLength(root, stopNode, stopOffset) {
+    if (!root) return 0;
+    let length = 0;
+    for (const node of walkTextNodes(root)) {
+      if (node === stopNode) return length + Math.min(stopOffset || 0, node.data.length);
+      length += node.data.length;
     }
-    if (!rect) return null;
-    const link = document.elementFromPoint(rect.left + Math.min(8, rect.width / 2), rect.top + rect.height / 2);
-    const block = link && link.closest && link.closest('p,li,h1,h2,h3,h4,h5,h6,blockquote');
-    if (!block || !root.contains(block)) return null;
-    const blockStart = textLength(root, block, 0);
-    const blockLength = block.textContent.length;
-    return {start: blockStart, end: blockStart + blockLength};
+    return length;
+  }
+
+  // Offsets in the Markdown value for the range the format bar was shown for.
+  function rangeOffsets(range) {
+    // The range's own text is the authority; the DOM may have been re-rendered
+    // since, so containers are never compared against the editor element.
+    if (!range) return null;
+    const selected = String(range.toString());
+    if (!selected.trim() || selected.length > 20000) return null;
+    const value = editor ? editor.getValue() : '';
+    const found = value.indexOf(selected);
+    return found < 0 ? null : {start: found, end: found + selected.length};
   }
 
   // Puts the caret back at a text offset after Vditor re-rendered the document.
@@ -1206,7 +1184,7 @@
     let remaining = start;
     let target = null;
     let offset = 0;
-    for (const node of walkText(root, null)) {
+    for (const node of walkTextNodes(root)) {
       if (remaining <= node.data.length) { target = node; offset = remaining; break; }
       remaining -= node.data.length;
     }
@@ -1223,45 +1201,36 @@
     if (!ready) return;
     const root = editorRoot();
     if (!root) return;
-    root.focus();
-    window.__applyLog = (window.__applyLog || []).concat([{action, captured: bubbleSelection ? {s: bubbleSelection.start, e: bubbleSelection.end} : null, rect: bubbleRect ? {l: Math.round(bubbleRect.left), t: Math.round(bubbleRect.top), w: Math.round(bubbleRect.width), h: Math.round(bubbleRect.height)} : null}]);
-    const offsets = selectionOffsets(bubbleRect);
-    const value = editor.getValue();
-    // Where the bubble asked for the change, captured while the selection was live.
-    const captured = bubbleSelection;
-    bubbleSelection = null;
-    let start = captured ? captured.start : (offsets ? offsets.start : value.length);
-    let end = captured ? captured.end : (offsets ? offsets.end : value.length);
-    if (captured && (end <= start || !value.slice(start, end).trim())) {
-      // The selection was lost while the bubble handled the click: take the rest
-      // of the paragraph the bubble was pointing at.
-      const lineEnd = value.indexOf('\n', start);
-      end = lineEnd < 0 ? value.length : lineEnd;
-    }
-    let selected = value.slice(start, end);
-    if (offsets && !selected.trim()) {
-      // A selection that only covers invisible markers: leave plain text alone.
-      toast('请先选中要修改的文字');
+    // The bar captured the user's range while it was still live; nothing else is
+    // trusted, because Vditor may have re-rendered since.
+    const offsets = pendingSelection;
+    pendingSelection = null;
+    if (!offsets) {
+      toast('没能找到刚才选中的文字，请重新选中后再试');
       return;
     }
-    // Whitespace around a partial selection would otherwise leak into the markup.
-    while (start < end && /\s/.test(value[start])) start++;
-    while (end > start && /\s/.test(value[end - 1])) end--;
-    selected = value.slice(start, end);
+    const value = editor.getValue();
+    let {start, end} = offsets;
+    while (start < end && /\s/.test(value[start])) start += 1;
+    while (end > start && /\s/.test(value[end - 1])) end -= 1;
+    const selected = value.slice(start, end);
+    if (!selected || selected.length > 20000) {
+      toast('没能找到刚才选中的文字，请重新选中后再试');
+      return;
+    }
     const markers = {bold: '**', italic: '*', strike: '~~', code: '`'};
     if (markers[action]) {
-      const result = StudioBubble.toggleMarkdown(value, start, end, markers[action], {bold: '粗体', italic: '斜体', strike: '删除', code: '代码'}[action]);
+      const result = StudioBubble.toggleMarkdown(value, start, end, markers[action], '文字');
       editor.setValue(result.value);
       setCaret(result.start);
       changed();
-      toast('已' + ({bold: '加粗', italic: '设为斜体', strike: '加删除线', code: '转为行内代码'})[action]);
       return;
     }
     if (action === 'link') {
       const isUrl = /^https?:\/\//i.test(selected);
       const url = window.prompt('链接地址（留空可取消）', isUrl ? selected : 'https://');
       if (!url || !url.trim()) return;
-      const text = isUrl ? url.trim() : selected || '链接文字';
+      const text = isUrl ? url.trim() : selected;
       const inserted = '[' + text + '](' + url.trim() + ')';
       editor.setValue(value.slice(0, start) + inserted + value.slice(end));
       setCaret(start + inserted.length);
@@ -1408,7 +1377,12 @@
       if (!event.target.closest?.('aside .doc-tree-line > button, aside #posts button, aside .result, aside #new')) return;
       closeSidebar();
     });
-    window.addEventListener('resize', () => { if (innerWidth > 960) document.body.classList.remove('sidebar-hidden'); }, {passive: true});
+    // Resizing across the phone breakpoint must also settle the drawer state.
+    window.addEventListener('resize', () => {
+      if (innerWidth > 960) document.body.classList.remove('sidebar-hidden');
+      else if (innerWidth <= 960) closeSidebar();
+      syncSidebarButton(!document.body.classList.contains('sidebar-hidden'));
+    }, {passive: true});
     $('focus-mode').onclick = () => {
       const focus = document.body.classList.toggle('focus-mode');
       $('focus-mode').setAttribute('aria-pressed', String(focus));
@@ -1565,11 +1539,10 @@
     StudioTableTools.mount({root: $('editor'), getValue: () => editor.getValue(), setValue: value => editor.setValue(value), onChange: changed, isBusy: () => !ready || busy});
     bubble = StudioBubble.mount({
       // Runs while the selection is still live, before Vditor can re-render.
+      // The bar reports the range it was shown for, while it is still live.
+      // The bar reports the range it was shown for, while it is still live.
       beforeApply: (kind, rect, range) => {
-        bubbleRect = rect;
-        // Only the range the bar was actually shown for; the live selection may
-        // already be empty by the time the button is pressed.
-        bubbleSelection = range ? selectionOffsets(null, range) : null;
+        pendingSelection = rangeOffsets(range);
       },
       isInside: node => {
         // Any text inside the editor counts, including the hidden wrapper nodes
