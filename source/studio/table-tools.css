@@ -7,10 +7,13 @@
 .studio-more::after{content:"摘要分隔 · 首页只显示到这里";display:block;font-size:10px;letter-spacing:.12em;color:#a8ac9c}
 .vditor-ir__node:has(> .studio-more){display:block!important;margin:22px 0!important;min-height:0!important;border:0!important}
 
-/* 表格：入口做成沿表格右缘的细条，不盖住正文；对话框窄到能看见后面的页面。 */
-.table-edit-launch{position:absolute;z-index:8;display:grid;place-items:center;writing-mode:vertical-rl;letter-spacing:.18em;padding:8px 3px;border:1px solid #cfdac6;border-left:0;border-radius:0 8px 8px 0;background:#f2f6ec;color:var(--accent);font-size:10px;line-height:1;white-space:nowrap;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s;touch-action:manipulation}
-.table-edit-launch:hover,.table-edit-launch:focus-visible{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 6px 18px #263f2b33;outline:none}
+/* 表格：右上角一个明确的「编辑表格」按钮，不再依赖细窄的竖条。 */
+.vditor-reset table{position:relative}
+.table-edit-launch{position:absolute;z-index:9;display:inline-flex;align-items:center;gap:5px;min-width:96px;height:30px;padding:0 12px;border:1px solid var(--accent-line);border-radius:8px;background:var(--paper);color:var(--accent);font-size:12px;font-weight:550;line-height:1;white-space:nowrap;cursor:pointer;box-shadow:var(--shadow-2);transition:background .15s,color .15s,box-shadow .15s,border-color .15s;touch-action:manipulation}
+.table-edit-launch::before{content:"✎";font-size:13px}
+.table-edit-launch:hover,.table-edit-launch:focus-visible{background:var(--accent);color:var(--paper);border-color:var(--accent);box-shadow:var(--shadow-3);outline:none}
 .table-edit-launch[hidden]{display:none}
+@media(max-width:760px){.table-edit-launch{min-width:84px;height:28px;padding:0 10px;font-size:11.5px}}
 .table-dialog{width:min(760px,94vw);max-height:88dvh;padding:20px 22px;border:1px solid var(--line);border-radius:14px;background:var(--paper);color:var(--ink);box-shadow:0 26px 90px #17251d40}
 .table-dialog::backdrop{background:#1b241e2e}
 .table-dialog h2{margin:0;font-size:17px;font-weight:650}

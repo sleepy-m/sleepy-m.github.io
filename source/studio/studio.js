@@ -11,7 +11,7 @@
   const PREFS_KEY = 'sleepym-studio-prefs-v1';
   const today = () => new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Shanghai'}).format(new Date());
   const split = value => String(value || '').split(/[,，、]/).map(item => item.trim()).filter(Boolean);
-  const SAMPLE = '## 先写一句最想说的话\n\n标题写好后，从这里开始。选中任意文字会出现格式浮条，输入 `/` 可以插入标题、表格、公式或图片。\n\n### 数学公式\n\n行内公式：$E=mc^2$。\n\n$$\n\\int_0^1 x^2\\,dx=\\frac{1}{3}\n$$\n\n### 表格与代码\n\n| 功能 | 体验 |\n| --- | --- |\n| Markdown | 即时渲染 |\n| LaTeX | 公式预览 |\n\n```python\ndef hello():\n    print("你好，博客！")\n```\n\n### 快捷键\n\n- `/` 插入标题、表格、公式、图片\n- 选中文字后点浮条按钮改格式\n- `Ctrl / ⌘ + S` 立即保存\n- `?` 查看全部快捷键\n';
+  const SAMPLE = '# 从这里开始写\n\n## 先写一句最想说的话\n\n标题写好后，从这里开始。选中任意文字会出现格式浮条，输入 `/` 可以插入标题、表格、公式或图片。\n\n### 数学公式\n\n行内公式：$E=mc^2$。\n\n$$\n\\int_0^1 x^2\\,dx=\\frac{1}{3}\n$$\n\n### 表格与代码\n\n| 功能 | 体验 |\n| --- | --- |\n| Markdown | 即时渲染 |\n| LaTeX | 公式预览 |\n\n```python\ndef hello():\n    print("你好，博客！")\n```\n\n### 快捷键\n\n- `/` 插入标题、表格、公式、图片\n- 选中文字后点浮条按钮改格式\n- `Ctrl / ⌘ + S` 立即保存\n- `?` 查看全部快捷键\n';
 
   let drafts = [], active = null, editor = null, bubble = null, ready = false, me = null;
   let busy = false, conflict = false, uploads = 0, storageFailed = false;
@@ -197,11 +197,16 @@
     updateStats();
     schedulePersist();
   }
+  // An empty document has no caret target; give it one paragraph to start from.
+  function ensureParagraph(body) {
+    return /^[\s\u200B]*$/.test(body || '') ? '\u200B' : body;
+  }
+
   function applyDraft(draft) {
     active = draft;
     conflict = !!draft.conflict;
     fillFields();
-    editor.setValue(draft.body);
+    editor.setValue(ensureParagraph(draft.body));
     editor.clearStack();
     updateStats();
     renderOutline();
@@ -388,6 +393,7 @@
   // ------------------------------------------------------------- editor events
   function changed() {
     if (!ready || busy) return;
+    scheduleBlankRepair();
     clearTimeout(savedTimer);
     setSaveState('dirty', '正在保存…');
     clearTimeout(editTimer);
@@ -405,6 +411,37 @@
       syncTimer = setTimeout(() => { flushEdit(); cloudSave().catch(() => {}); }, 1500);
     }
   }
+  // Vditor drops a second Enter on an otherwise empty line, which makes it
+  // impossible to add spacing. After typing pauses, put that blank line back.
+  let blankWanted = -1;
+  let blankTimer = 0;
+  function noteEnter() {
+    const block = currentBlock();
+    if (!block) return;
+    if (block.textContent.replace(/\u200B/g, '').trim()) return;
+    blankWanted = textLength(editorRoot(), block, 0);
+  }
+  function scheduleBlankRepair() {
+    if (blankWanted < 0) return;
+    clearTimeout(blankTimer);
+    blankTimer = setTimeout(repairBlank, 700);
+  }
+  function repairBlank() {
+    blankTimer = 0;
+    if (blankWanted < 0 || !ready || busy) return;
+    const wanted = blankWanted;
+    blankWanted = -1;
+    const body = editor.getValue();
+    const lineEnd = body.indexOf('\n', wanted);
+    const at = lineEnd < 0 ? body.length : lineEnd;
+    // Only act when that spot still holds the caret and has no blank line yet.
+    if (body.slice(at, at + 2) === '\n\n' || body.slice(at - 1, at + 1) === '\n\n') return;
+    editor.setValue(body.slice(0, at) + '\n' + body.slice(at));
+    setCaret(at + 1);
+    commit();
+    persist();
+  }
+
   function saveNow() {
     if (!ready) return;
     flushEdit();
@@ -829,7 +866,14 @@
   }
   function atBlockStart() {
     const block = currentBlock();
-    if (!block) return false;
+    if (!block) {
+      // Empty document: accept a caret that sits in the editable area.
+      const selection = getSelection();
+      const root = editorRoot();
+      if (!selection || !selection.rangeCount || !root) return false;
+      const node = selection.anchorNode;
+      return !!node && (node === root || root.contains(node));
+    }
     const selection = getSelection();
     if (!selection.rangeCount) return false;
     const range = selection.getRangeAt(0);
@@ -1499,7 +1543,7 @@
         cdn: location.origin + '/vendor/vditor',
         lang: 'zh_CN',
         mode: 'ir',
-        value: active.body || '',
+        value: ensureParagraph(active.body),
         cache: {enable: false},
         height: 'auto',
         outline: {enable: false, position: 'right'},
@@ -1518,6 +1562,7 @@
         // untouched, otherwise Vditor re-renders and the selection collapses.
         keydown: event => {
           if (slash && slash.intercept(event)) return;
+          if (event.key === 'Enter' && !event.isComposing && !event.shiftKey) noteEnter();
         },
         after: () => {
           ready = true;

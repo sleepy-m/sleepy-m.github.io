@@ -48,15 +48,16 @@
    const table=node.closest('table');
    return table&&root.contains(table)?table:null;
   }
-  // The handle glues itself to the right edge of the table holding the caret.
+  // The button sits just above the table's top-right corner, clear of the text.
   function place(){
    const table=isBusy()?null:caretTable();
    if(!table){launch.hidden=true;anchor=null;return;}
    anchor=table;
    launch.hidden=false;
-   launch.style.left=(table.offsetLeft+table.offsetWidth+2)+'px';
-   launch.style.top=table.offsetTop+'px';
-   launch.style.height=table.offsetHeight+'px';
+   const width=launch.offsetWidth||96;
+   launch.style.left=Math.max(0, table.offsetLeft+table.offsetWidth-width)+'px';
+   launch.style.top=Math.max(0, table.offsetTop-36)+'px';
+   launch.style.height='';
   }
   function updateLayout(){
    if(isBusy())return;
