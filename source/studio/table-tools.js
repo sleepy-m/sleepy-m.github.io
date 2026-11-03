@@ -36,7 +36,7 @@
   const toolbar=document.createElement('div');toolbar.className='table-context-tools';toolbar.setAttribute('role','toolbar');toolbar.setAttribute('aria-label','当前单元格的表格操作');toolbar.hidden=true;
   const handles=document.createElement('div');handles.className='table-column-handles';handles.setAttribute('role','group');handles.setAttribute('aria-label','表格行列选择与尺寸调整');
   document.body.append(toolbar,handles);
-  let current={index:-1,row:0,col:0,table:null},anchor=null,selected={r0:0,r1:0,c0:0,c1:0},layoutTimer=0,placeTimer=0,dragging=false,selectionDrag=null,handleTable=null,handleList=[];
+  let current={index:-1,row:0,col:0,table:null},anchor=null,selected={r0:0,r1:0,c0:0,c1:0},selectionKind='cell',layoutTimer=0,placeTimer=0,dragging=false,selectionDrag=null,handleTable=null,handleList=[];
   const visibleTables=()=>[...root.querySelectorAll('table')].filter(table=>table.getClientRects().length);
   function domTableIndex(table){return visibleTables().indexOf(table);}
   function cellAt(node){
@@ -53,7 +53,7 @@
   function choose(hit){
    if(!hit)return;
    const inside=selected.index===hit.index&&hit.row>=selected.r0&&hit.row<=selected.r1&&hit.col>=selected.c0&&hit.col<=selected.c1;
-   if(!inside){anchor={index:hit.index,row:hit.row,col:hit.col};selected={index:hit.index,r0:hit.row,r1:hit.row,c0:hit.col,c1:hit.col};}
+   if(!inside){anchor={index:hit.index,row:hit.row,col:hit.col};selected={index:hit.index,r0:hit.row,r1:hit.row,c0:hit.col,c1:hit.col};selectionKind='cell';}
    current={index:hit.index,row:hit.row,col:hit.col,table:hit.table};place();
   }
   function paintSelection(table){
@@ -67,6 +67,7 @@
    const row=axis==='row'?spec.index:clamp(current.row,0,table.rows.length-1);
    const col=axis==='col'?spec.index:clamp(current.col,0,(table.rows[0]?.cells.length||1)-1);
    current={index,row,col,table};
+   selectionKind=axis==='row'?'rows':'columns';
    anchor={index,row:axis==='row'?spec.index:0,col:axis==='col'?spec.index:0};
    selected=axis==='row'
     ?{index,r0:Math.min(spec.index,extendTo),r1:Math.max(spec.index,extendTo),c0:0,c1:(table.rows[0]?.cells.length||1)-1}
@@ -100,6 +101,7 @@
    const value=source.slice(0,table.start)+serialize(rows,align,widths,heights)+source.slice(table.end);
    setValue(value);onChange();
    current={index,row:clamp(focus.row,0,rows.length-1),col:clamp(focus.col,0,align.length-1),table:null};
+   selectionKind='cell';
    anchor={index,row:current.row,col:current.col};selected={index,r0:current.row,r1:current.row,c0:current.col,c1:current.col};
    setTimeout(()=>{
     const next=visibleTables()[index];if(!next)return;
@@ -126,17 +128,31 @@
    }
   }
   function selectionBounds(){
+   if(current.table?.isConnected){
+    const cells=[...current.table.querySelectorAll('.studio-table-selected')];
+    if(cells.length){
+     const rows=cells.map(cell=>cell.parentElement.rowIndex),cols=cells.map(cell=>cell.cellIndex);
+     return{index:current.index,r0:Math.min(...rows),r1:Math.max(...rows),c0:Math.min(...cols),c1:Math.max(...cols)};
+    }
+   }
    if(selected.index===current.index)return selected;
    return{r0:current.row,r1:current.row,c0:current.col,c1:current.col};
   }
   async function copyRows(){
    const parsed=tables(getValue())[current.index];if(!parsed)return;
-   const b=selectionBounds(),matrix=parsed.rows.slice(b.r0,b.r1+1);
+   const b=selectionBounds(),r0=selectionKind==='rows'?b.r0:current.row,r1=selectionKind==='rows'?b.r1:current.row;
+   const matrix=parsed.rows.slice(r0,r1+1);
    await copyMatrix(matrix);
   }
   async function copyColumns(){
    const parsed=tables(getValue())[current.index];if(!parsed)return;
-   const b=selectionBounds(),matrix=parsed.rows.map(row=>row.slice(b.c0,b.c1+1));
+   const b=selectionBounds(),c0=selectionKind==='columns'?b.c0:current.col,c1=selectionKind==='columns'?b.c1:current.col;
+   const matrix=parsed.rows.map(row=>row.slice(c0,c1+1));
+   await copyMatrix(matrix);
+  }
+  async function copySelection(){
+   const parsed=tables(getValue())[current.index];if(!parsed)return;
+   const b=selectionBounds(),matrix=parsed.rows.slice(b.r0,b.r1+1).map(row=>row.slice(b.c0,b.c1+1));
    await copyMatrix(matrix);
   }
   async function copyMatrix(matrix){
@@ -146,14 +162,15 @@
    try{await navigator.clipboard.write([new ClipboardItem({'text/plain':new Blob([text],{type:'text/plain'}),'text/html':new Blob([html],{type:'text/html'})})]);}
    catch{await copyText(text);}
   }
-  const copyRow=makeButton('复制行','复制当前行或 Shift 点击选中的多行',copyRows);
-  const copyColumn=makeButton('复制列','复制当前列或 Shift 点击选中的多列',copyColumns);
+  const copyRange=makeButton('复制选区','将高亮的行、列或单元格区域复制为表格',copySelection);
+  const copyRow=makeButton('复制行','选择行头圆点后复制选中行；否则复制当前行',copyRows);
+  const copyColumn=makeButton('复制列','选择列头圆点后复制选中列；否则复制当前列',copyColumns);
   const addRow=makeButton('＋ 行 ↓','在当前行下方插入一行',()=>writeTable(current.index,data=>{data.rows.splice(current.row+1,0,data.align.map(()=>''));data.heights.splice(current.row+1,0,56);current.row++;},{get row(){return current.row;},get col(){return current.col;}}));
   const addCol=makeButton('＋ 列 →','在当前列右侧插入一列',()=>writeTable(current.index,data=>{const at=current.col+1;data.align.splice(at,0,'---');data.widths.splice(at,0,160);data.rows.forEach(row=>row.splice(at,0,''));current.col=at;},{get row(){return current.row;},get col(){return current.col;}}));
   const deleteRow=makeButton('删行','删除当前行（表头行会保留）',()=>writeTable(current.index,data=>{if(current.row>0){data.rows.splice(current.row,1);data.heights.splice(current.row,1);current.row--; }},{get row(){return current.row;},get col(){return current.col;}}));
   const deleteCol=makeButton('删列','删除当前列',()=>writeTable(current.index,data=>{if(data.align.length>1){data.align.splice(current.col,1);data.widths.splice(current.col,1);data.rows.forEach(row=>row.splice(current.col,1));current.col=Math.max(0,current.col-1);}},{get row(){return current.row;},get col(){return current.col;}}));
   const position=document.createElement('span');position.className='table-context-position';position.setAttribute('aria-live','polite');
-  toolbar.append(copyRow,copyColumn,addRow,addCol,deleteRow,deleteCol,position);
+  toolbar.append(copyRange,copyRow,copyColumn,addRow,addCol,deleteRow,deleteCol,position);
 
   function applyWidths(table,widths){
    table.style.tableLayout='fixed';table.style.width=(widths.reduce((a,b)=>a+b,0)+2)+'px';table.style.maxWidth='none';
@@ -249,6 +266,7 @@
    const b=selected.index===current.index?selected:{r0:current.row,r1:current.row,c0:current.col,c1:current.col};
    const rows=b.r0===b.r1?`${b.r0+1} 行`:`第 ${b.r0+1}-${b.r1+1} 行`,cols=b.c0===b.c1?`${b.c0+1} 列`:`第 ${b.c0+1}-${b.c1+1} 列`;
    position.textContent=`${rows} · ${cols}`;
+   copyRange.textContent=selectionKind==='rows'?'复制选中行':selectionKind==='columns'?'复制选中列':'复制选区';
    toolbar.hidden=false;toolbar.style.left=clamp(rect.left,8,innerWidth-toolbar.offsetWidth-8)+'px';toolbar.style.top=Math.max(8,rect.top-toolbar.offsetHeight-10)+'px';
    const {widths,heights}=dimensions(current.index,table);buildHandles(table,current.index,widths,heights);
    paintSelection(table);
@@ -270,15 +288,16 @@
    const active=visibleTables()[current.index];
    if(current.index>=0&&active){current.table=active;place();}
   }
-  function schedulePlace(){clearTimeout(placeTimer);placeTimer=setTimeout(()=>{const hit=selectionCell();if(hit)choose(hit);else place();},40);}
+  function schedulePlace(){clearTimeout(placeTimer);placeTimer=setTimeout(()=>{if(selectionKind!=='cell'){place();return;}const hit=selectionCell();if(hit)choose(hit);else place();},40);}
   new MutationObserver(()=>{clearTimeout(layoutTimer);layoutTimer=setTimeout(updateLayout,100);}).observe(root,{childList:true,subtree:true,characterData:true});
   root.addEventListener('click',event=>{
    const hit=cellAt(event.target);
    if(hit){
     if(event.shiftKey&&anchor?.index===hit.index){selected={index:hit.index,r0:Math.min(anchor.row,hit.row),r1:Math.max(anchor.row,hit.row),c0:Math.min(anchor.col,hit.col),c1:Math.max(anchor.col,hit.col)};}
     else{anchor={index:hit.index,row:hit.row,col:hit.col};selected={index:hit.index,r0:hit.row,r1:hit.row,c0:hit.col,c1:hit.col};}
+    selectionKind='cell';
     choose(hit);paintSelection(hit.table);
-   }else{current={index:-1,row:0,col:0,table:null};anchor=null;selected={index:-1,r0:0,r1:0,c0:0,c1:0};toolbar.hidden=true;clearHandles();}
+   }else{current={index:-1,row:0,col:0,table:null};anchor=null;selected={index:-1,r0:0,r1:0,c0:0,c1:0};selectionKind='cell';toolbar.hidden=true;clearHandles();}
   });
   root.addEventListener('focusin',event=>{const hit=cellAt(event.target);if(hit)choose(hit);});
   root.addEventListener('keyup',schedulePlace);
