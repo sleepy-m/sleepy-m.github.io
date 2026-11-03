@@ -91,7 +91,7 @@
   font-family:var(--ui);
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;overflow-anchor:none}
 body{margin:0;background:var(--canvas);color:var(--ink);font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:var(--accent);text-decoration:none}
 a:hover{color:var(--accent-2)}

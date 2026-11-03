@@ -15,6 +15,7 @@
 
   let drafts = [], active = null, editor = null, bubble = null, ready = false, me = null;
   let busy = false, conflict = false, uploads = 0, storageFailed = false;
+  let editVersion = 0;
   let editTimer = 0, persistTimer = 0, listTimer = 0, syncTimer = 0, outlineTimer = 0, savedTimer = 0;
   let queue = Promise.resolve();
   let prefs = loadPrefs();
@@ -189,20 +190,6 @@
       syncTimer = setTimeout(() => { flushEdit(); cloudSave().catch(() => {}); }, 1200);
     }
   }
-  // Ask the table helper to restore three-dash separators in the stored value.
-  function normalizeTables() {
-    const helper = window.StudioTableTools;
-    if (!helper || !helper.normalizeSeparators || !editor) return;
-    const current = editor.getValue();
-    const fixed = helper.normalizeSeparators(current);
-    if (fixed === current) return;
-    const caret = getSelection();
-    editor.setValue(fixed);
-    if (caret && caret.rangeCount) {
-      // Keep the user roughly where they were; exact caret is restored on next input.
-    }
-  }
-
   function flushEdit() {
     if (!editTimer) return;
     clearTimeout(editTimer);
@@ -407,12 +394,12 @@
   // ------------------------------------------------------------- editor events
   function changed() {
     if (!ready || busy) return;
+    editVersion += 1;
     clearTimeout(savedTimer);
     setSaveState('dirty', '正在保存…');
     clearTimeout(editTimer);
     editTimer = setTimeout(() => {
       editTimer = 0;
-      normalizeTables();
       commit();
       updateStats();
       renderListSoon();
@@ -579,6 +566,8 @@
   }
   async function connect() {
     if (!cloudHost) return;
+    const versionAtStart = editVersion;
+    const activeAtStart = active;
     $('login').textContent = '登录云端同步';
     $('login').href = '/auth/login';
     try {
@@ -602,10 +591,18 @@
         else drafts.push(normalizeDraft({...draft, cloud: true, unsynced: false}));
       }
       const next = drafts.find(draft => draft.unsynced) || drafts.find(draft => draft.cloud) || drafts[0];
-      applyDraft(next);
+      if (editVersion === versionAtStart && active === activeAtStart) {
+        applyDraft(next);
+        setSaveState(next.conflict ? 'error' : 'cloud', next.conflict ? '版本冲突' : next.unsynced ? '待同步' : '云端已保存');
+        status(next.conflict ? '本机备份与云端版本冲突，请下载备份后读取最新版本。' : '云端已连接。');
+      } else {
+        commit();
+        renderList();
+        persist();
+        status('云端已连接，连接期间的编辑已保留，正在同步。');
+        cloudSave().catch(() => {});
+      }
       persist();
-      setSaveState(next.conflict ? 'error' : 'cloud', next.conflict ? '版本冲突' : next.unsynced ? '待同步' : '云端已保存');
-      status(next.conflict ? '本机备份与云端版本冲突，请下载备份后读取最新版本。' : '云端已连接。');
       await loadPosts().catch(() => {});
     } catch (error) {
       me = null;
@@ -1059,6 +1056,7 @@
     // In regular Markdown text, leave backticks alone so Vditor can turn ```
     // into a fenced block. Inside an existing code block, pair a single tick.
     const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"};
+    let scrollBeforeMarkdownTransform = null;
     mount.addEventListener('keydown', event => {
       if (handleListTab(event)) return;
       const root = editorRoot();
@@ -1070,6 +1068,12 @@
       const range = selection.getRangeAt(0);
       const inCodeBlock = !!element.closest('.vditor-ir__node[data-type="code-block"]');
       const activePairs = inCodeBlock ? {...pairs, '`': '`'} : pairs;
+      const inMathBlock = !!element.closest('.vditor-ir__node[data-type="math-block"]');
+      if ((!event.ctrlKey && !event.metaKey && !event.altKey &&
+           (['`', '$', '~', '*', '_'].includes(event.key) ||
+            (event.key === 'Enter' && (inCodeBlock || inMathBlock))))) {
+        scrollBeforeMarkdownTransform = {x: window.scrollX, y: window.scrollY};
+      }
       const next = node?.nodeType === Node.TEXT_NODE
         ? node.data[selection.anchorOffset]
         : node?.childNodes?.[selection.anchorOffset]?.textContent?.[0];
@@ -1159,6 +1163,16 @@
         event.preventDefault(); event.stopImmediatePropagation(); changed();
       }
     }, true);
+    mount.addEventListener('keyup', event => {
+      if (!scrollBeforeMarkdownTransform) return;
+      const saved = scrollBeforeMarkdownTransform;
+      scrollBeforeMarkdownTransform = null;
+      requestAnimationFrame(() => {
+        if (Math.abs(window.scrollX - saved.x) > 1 || Math.abs(window.scrollY - saved.y) > 1) {
+          window.scrollTo(saved.x, saved.y);
+        }
+      });
+    });
     function handleListTab(event) {
       if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return false;
       const selection = getSelection();
@@ -1713,6 +1727,22 @@
           if (slash && slash.intercept(event)) return;
         },
         after: () => {
+          const hint = editor?.vditor?.hint;
+          if (hint && !hint.__studioHideEmptyLanguageHints) {
+            const renderHint = hint.genHTML.bind(hint);
+            hint.genHTML = (items, query, instance) => {
+              const selection = getSelection();
+              const node = selection?.anchorNode;
+              const anchor = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+              const language = anchor?.closest?.('[data-type="code-block-info"]');
+              if (language && !language.textContent.replace(/\u200b/g, '').trim() && !query) {
+                hint.element.style.display = 'none';
+                return;
+              }
+              renderHint(items, query, instance);
+            };
+            hint.__studioHideEmptyLanguageHints = true;
+          }
           ready = true;
           slash = buildSlashMenu();
           renderList();
