@@ -1070,6 +1070,38 @@
       if (!element?.closest) return;
       const range = selection.getRangeAt(0);
 
+      if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey && range.collapsed) {
+        const codeBlock = element.closest('.vditor-ir__node[data-type="code-block"]');
+        const code = codeBlock?.querySelector('.vditor-ir__marker--pre code');
+        if (code?.contains(range.startContainer)) {
+          const beforeCaret = range.cloneRange();
+          beforeCaret.selectNodeContents(code);
+          beforeCaret.setEnd(range.startContainer, range.startOffset);
+          const currentLine = beforeCaret.toString().split('\n').pop() || '';
+          const indent = currentLine.match(/^[\t ]*/)?.[0] || '';
+          if (indent) setTimeout(() => {
+            const liveSelection = getSelection();
+            if (!liveSelection?.rangeCount || !liveSelection.isCollapsed) return;
+            const liveRange = liveSelection.getRangeAt(0);
+            const liveNode = liveRange.startContainer;
+            const liveElement = liveNode.nodeType === Node.TEXT_NODE ? liveNode.parentElement : liveNode;
+            const liveCode = liveElement?.closest?.('.vditor-ir__node[data-type="code-block"]')
+              ?.querySelector('.vditor-ir__marker--pre code');
+            if (!liveCode?.contains(liveNode)) return;
+            const indentNode = document.createTextNode(indent);
+            liveRange.insertNode(indentNode);
+            liveRange.setStartAfter(indentNode);
+            liveRange.collapse(true);
+            liveSelection.removeAllRanges();
+            liveSelection.addRange(liveRange);
+            editorRoot()?.dispatchEvent(new InputEvent('input', {
+              bubbles: true, inputType: 'insertText', data: indent,
+            }));
+            changed();
+          }, 0);
+        }
+      }
+
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'a') {
         const block = element.closest('pre, table, blockquote, ul, ol, figure');
         if (!block || !root.contains(block)) return;
@@ -1646,6 +1678,7 @@
         lang: 'zh_CN',
         mode: 'ir',
         value: ensureParagraph(active.body),
+        tab: '    ',
         cache: {enable: false},
         height: 'auto',
         outline: {enable: false, position: 'right'},
