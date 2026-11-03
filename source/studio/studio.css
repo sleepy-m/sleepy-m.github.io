@@ -250,6 +250,7 @@ kbd{font-family:var(--mono);font-size:.82em;background:var(--paper-2);border:1px
 .vditor-reset tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--ink) 2%,transparent)}
 .vditor-reset a{border-bottom:1px solid var(--accent-line);color:var(--accent)}
 .vditor-ir__marker{color:var(--faint)}
+.vditor-ir__node--expand[data-type="code-block"]::before,.vditor-ir__node--expand[data-type="code-block"]::after{content:none!important}
 .heading-flash{animation:flash .9s ease-out}
 @keyframes flash{0%{background:var(--hl)}100%{background:transparent}}
 .vditor--fullscreen{background:var(--paper)!important}

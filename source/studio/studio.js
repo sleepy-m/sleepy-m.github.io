@@ -1727,22 +1727,6 @@
           if (slash && slash.intercept(event)) return;
         },
         after: () => {
-          const hint = editor?.vditor?.hint;
-          if (hint && !hint.__studioHideEmptyLanguageHints) {
-            const renderHint = hint.genHTML.bind(hint);
-            hint.genHTML = (items, query, instance) => {
-              const selection = getSelection();
-              const node = selection?.anchorNode;
-              const anchor = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-              const language = anchor?.closest?.('[data-type="code-block-info"]');
-              if (language && !language.textContent.replace(/\u200b/g, '').trim() && !query) {
-                hint.element.style.display = 'none';
-                return;
-              }
-              renderHint(items, query, instance);
-            };
-            hint.__studioHideEmptyLanguageHints = true;
-          }
           ready = true;
           slash = buildSlashMenu();
           renderList();
