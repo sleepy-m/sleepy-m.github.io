@@ -1056,9 +1056,8 @@
   }
 
   function attachEditorAssist(mount) {
-    // Backticks are deliberately not paired: Vditor converts ``` into a
-    // fenced code block while typing, and inserting a matching tick first
-    // corrupts that transform and can reset the caret to the document start.
+    // In regular Markdown text, leave backticks alone so Vditor can turn ```
+    // into a fenced block. Inside an existing code block, pair a single tick.
     const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"};
     mount.addEventListener('keydown', event => {
       if (handleListTab(event)) return;
@@ -1069,6 +1068,20 @@
       const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
       if (!element?.closest) return;
       const range = selection.getRangeAt(0);
+      const inCodeBlock = !!element.closest('.vditor-ir__node[data-type="code-block"]');
+      const activePairs = inCodeBlock ? {...pairs, '`': '`'} : pairs;
+      const next = node?.nodeType === Node.TEXT_NODE
+        ? node.data[selection.anchorOffset]
+        : node?.childNodes?.[selection.anchorOffset]?.textContent?.[0];
+
+      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey &&
+          Object.values(activePairs).includes(event.key) && next === event.key) {
+        const caret = document.createRange();
+        if (node?.nodeType === Node.TEXT_NODE) caret.setStart(node, selection.anchorOffset + 1);
+        else caret.setStart(node, Math.min(node.childNodes.length, selection.anchorOffset + 1));
+        caret.collapse(true); selection.removeAllRanges(); selection.addRange(caret);
+        event.preventDefault(); event.stopImmediatePropagation(); return;
+      }
 
       if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey && range.collapsed) {
         const codeBlock = element.closest('.vditor-ir__node[data-type="code-block"]');
@@ -1119,29 +1132,30 @@
       if (event.key === 'Backspace' && range.collapsed && node?.nodeType === Node.TEXT_NODE) {
         const offset = selection.anchorOffset;
         const before = node.data[offset - 1], after = node.data[offset];
-        if (Object.entries(pairs).some(([open, close]) => before === open && after === close)) {
+        if (Object.entries(activePairs).some(([open, close]) => before === open && after === close)) {
           range.setStart(node, offset - 1); range.setEnd(node, offset + 1); range.deleteContents();
           root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'deleteContentBackward', data: null}));
           event.preventDefault(); event.stopImmediatePropagation(); changed(); return;
         }
       }
 
-      if (event.key.length === 1 && pairs[event.key] && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        if (!range.collapsed) return;
-        const next = node?.nodeType === Node.TEXT_NODE ? node.data[selection.anchorOffset] : '';
-        if (event.key === pairs[event.key] && next === event.key) {
-          const caret = document.createRange();
-          if (node?.nodeType === Node.TEXT_NODE) caret.setStart(node, selection.anchorOffset + 1);
-          else caret.setStart(node, Math.min(node.childNodes.length, selection.anchorOffset + 1));
-          caret.collapse(true); selection.removeAllRanges(); selection.addRange(caret);
-          event.preventDefault(); event.stopImmediatePropagation(); return;
+      if (event.key.length === 1 && activePairs[event.key] && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const close = activePairs[event.key];
+        if (range.collapsed) {
+          range.deleteContents();
+          const pair = document.createTextNode(event.key + close);
+          range.insertNode(pair);
+          const inside = document.createRange(); inside.setStart(pair, 1); inside.collapse(true);
+          selection.removeAllRanges(); selection.addRange(inside);
+        } else {
+          const closeNode = document.createTextNode(close);
+          const closeRange = range.cloneRange(); closeRange.collapse(false); closeRange.insertNode(closeNode);
+          const openNode = document.createTextNode(event.key);
+          const openRange = range.cloneRange(); openRange.collapse(true); openRange.insertNode(openNode);
+          const inside = document.createRange(); inside.setStartAfter(openNode); inside.setEndBefore(closeNode);
+          selection.removeAllRanges(); selection.addRange(inside);
         }
-        range.deleteContents();
-        const pair = document.createTextNode(event.key + pairs[event.key]);
-        range.insertNode(pair);
-        const inside = document.createRange(); inside.setStart(pair, 1); inside.collapse(true);
-        selection.removeAllRanges(); selection.addRange(inside);
-        root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: event.key + pairs[event.key]}));
+        root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: event.key + close}));
         event.preventDefault(); event.stopImmediatePropagation(); changed();
       }
     }, true);
