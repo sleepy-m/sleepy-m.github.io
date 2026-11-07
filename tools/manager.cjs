@@ -30,14 +30,15 @@ function entries() {
   fs.readdirSync(path.join(local,'drafts')).filter(f=>f.endsWith('.json')).forEach(f=>ids.add(f.slice(0,-5)));
   return [...ids].map(id=> {const e=readEntry(id); return {id,title:e.title,date:e.date,draft:!!e.draft,published:fs.existsSync(postFile(id))};}).sort((a,b)=>b.date.localeCompare(a.date));
 }
-function validate(data) {
+function validate(data, publishing = false) {
   safeId(data.id);
-  if (typeof data.title!=='string' || !data.title.trim() || data.title.length>200) throw Error('请填写文章标题');
+  if (typeof data.title!=='string' || data.title.length>200) throw Error('标题最多 200 字');
+  if (publishing && !data.title.trim()) throw Error('请填写文章标题');
   if(typeof data.body!=='string'||data.body.length>2e6) throw Error('正文过大或格式无效');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || Number.isNaN(Date.parse(data.date))) throw Error('请填写有效日期');
+  if ((publishing || data.date!=='') && (!/^\d{4}-\d{2}-\d{2}$/.test(data.date) || Number.isNaN(Date.parse(data.date)))) throw Error('请填写有效日期');
   for(const key of ['categories','tags']) if(!Array.isArray(data[key])||data[key].some(v=>typeof v!=='string'||v.length>100)||data[key].length>30) throw Error('分类或标签格式无效');
   if(data.baseHash!==null && !/^[a-f0-9]{64}$/.test(data.baseHash)) throw Error('文章版本无效，请重新打开文章');
-  return {id:data.id,title:data.title.trim(),body:data.body,date:data.date,categories:data.categories,tags:data.tags,baseHash:data.baseHash};
+  return {id:data.id,title:publishing?data.title.trim():data.title,body:data.body,date:data.date,categories:data.categories,tags:data.tags,baseHash:data.baseHash};
 }
 function run(exe,args,allowed=[0]) {return new Promise((resolve,reject)=> {
   const child=spawn(exe,args,{cwd:root,windowsHide:true,env:process.env}); let output='';
@@ -51,7 +52,7 @@ async function publish(data) {
   if(publishing)throw Error('正在发布，请稍候');
   publishing=true;
   try {
-    const entry=validate(data); atomic(draftFile(entry.id),JSON.stringify(entry));
+    const entry=validate(data,true); atomic(draftFile(entry.id),JSON.stringify(entry));
     await run('git',['fetch','origin','main']);
     const upstream=(await run('git',['rev-list','--count','HEAD..origin/main'])).output.trim();
     if(upstream!=='0') {
@@ -130,8 +131,20 @@ const server=http.createServer(async(req,res)=> {
     return send(res,200,{url:'/uploads/'+name});
   }
   if(route==='/api/status'&&req.method==='GET') {
-    const result=await run('gh',['run','list','--workflow','pages.yml','--limit','1','--json','status,conclusion,url,headSha']);
-    return send(res,200,JSON.parse(result.output)[0]||{});
+    const sha=url.searchParams.get('sha')||'';
+    if(!/^[a-f0-9]{40}$/.test(sha))throw Error('提交版本无效');
+    try {
+      const result=await fetch('https://api.github.com/repos/sleepy-m/sleepy-m.github.io/actions/workflows/pages.yml/runs?head_sha='+sha,{
+        headers:{'Accept':'application/vnd.github+json','User-Agent':'sleepym-blog-manager'},
+        signal:AbortSignal.timeout(5000)
+      });
+      if(!result.ok)return send(res,200,{status:'unknown'});
+      const runs=(await result.json()).workflow_runs;
+      const run=runs.find(item=>item.head_sha===sha);
+      return send(res,200,run?{status:run.status,conclusion:run.conclusion}:{status:'queued'});
+    } catch {
+      return send(res,200,{status:'unknown'});
+    }
   }
   send(res,404,{error:'页面不存在'});
  }catch(e){send(res,400,{error:e.message});}

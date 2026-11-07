@@ -11,12 +11,16 @@
   const PREFS_KEY = 'sleepym-studio-prefs-v1';
   const today = () => new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Shanghai'}).format(new Date());
   const split = value => String(value || '').split(/[,，、]/).map(item => item.trim()).filter(Boolean);
-  const SAMPLE = '# 从这里开始写\n\n## 先写一句最想说的话\n\n标题写好后，从这里开始。选中任意文字会出现格式浮条，输入 `/` 可以插入标题、表格、公式或图片。\n\n### 数学公式\n\n行内公式：$E=mc^2$。\n\n$$\n\\int_0^1 x^2\\,dx=\\frac{1}{3}\n$$\n\n### 表格与代码\n\n| 功能 | 体验 |\n| --- | --- |\n| Markdown | 即时渲染 |\n| LaTeX | 公式预览 |\n\n```python\ndef hello():\n    print("你好，博客！")\n```\n\n### 快捷键\n\n- `/` 插入标题、表格、公式、图片\n- 选中文字后点浮条按钮改格式\n- `Ctrl / ⌘ + S` 立即保存\n- `?` 查看全部快捷键\n';
-
   let drafts = [], active = null, editor = null, bubble = null, ready = false, me = null;
   let busy = false, conflict = false, uploads = 0, storageFailed = false;
-  let editVersion = 0;
-  let editTimer = 0, persistTimer = 0, listTimer = 0, syncTimer = 0, outlineTimer = 0, savedTimer = 0;
+  let editVersion = 0, applying = false, cloudLoading = false;
+  let observedBody = '', bodyComposing = false;
+  const draftVersions = new WeakMap();
+  const pendingSync = new WeakMap();
+  const storedDrafts = new Map();
+  const normalizedDrafts = new WeakMap();
+  const draftVersion = draft => draftVersions.get(draft) || 0;
+  let editTimer = 0, persistTimer = 0, listTimer = 0, syncTimer = 0, outlineTimer = 0;
   let queue = Promise.resolve();
   let prefs = loadPrefs();
   let extrasWanted = false;
@@ -69,15 +73,122 @@
   function loadDrafts() {
     try {
       const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || '[]');
-      if (Array.isArray(saved)) drafts = saved.filter(item => item && typeof item.body === 'string').map(normalizeDraft);
+      if (Array.isArray(saved)) {
+        const valid = saved.filter(item => item && typeof item.body === 'string');
+        for (const draft of valid) storedDrafts.set(draft.id, JSON.stringify(draft));
+        drafts = valid.map(raw => {
+          const draft = normalizeDraft(raw);
+          if (draft.id === raw.id) normalizedDrafts.set(draft, JSON.stringify(draft));
+          return draft;
+        });
+      }
     } catch { storageFailed = true; }
-    if (!drafts.length) drafts = [normalizeDraft({id: crypto.randomUUID(), title: '欢迎试写', body: SAMPLE, date: today(), revision: 0})];
+    if (!drafts.length) drafts = [normalizeDraft({})];
     const recent = drafts.slice().sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
-    active = recent[0] || drafts[0];
+    active = drafts.find(draft => draft.id === prefs.activeId) || recent[0];
   }
+  const localConflicts = new Set();
+  const recoveredDrafts = new WeakMap();
+  const localConflictMessage = '另一标签页修改了这份草稿，本机没有足够空间保存恢复副本。请先导出当前内容。';
+
+  function recoveryCopy(draft) {
+    const id = crypto.randomUUID();
+    const {id: treeId, parent} = Tree.metadata(draft);
+    return normalizeDraft({
+      ...draft, id, body: treeId ? Tree.stamp(draft.body, id, parent) : draft.body,
+      path: null, baseSha: null, commit: null, revision: 0,
+      cloud: false, unsynced: false, conflict: false, recovery: true,
+    });
+  }
+
   function writeDrafts() {
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
+      const data = JSON.parse(localStorage.getItem(DRAFT_KEY) || '[]');
+      const merged = new Map(data.filter(draft => draft && typeof draft.body === 'string').map(draft => [draft.id, JSON.stringify(draft)]));
+      const next = new Map();
+      const recoveries = [];
+      let changedOnDisk = false;
+      for (const draft of drafts) {
+        const id = draft.id;
+        const value = JSON.stringify(draft);
+        const previous = storedDrafts.get(id);
+        const current = merged.get(id);
+        if (value === normalizedDrafts.get(draft)) {
+          if (previous !== undefined) next.set(id, previous);
+          continue;
+        }
+        if (value !== previous && value !== current && current !== previous) {
+          const copy = recoveryCopy(draft);
+          recoveries.push({draft, current, copy, value: JSON.stringify(copy)});
+          if (previous !== undefined) next.set(id, previous);
+          continue;
+        }
+        next.set(id, value);
+        if (value !== previous && value !== current) {
+          merged.set(id, value);
+          changedOnDisk = true;
+        }
+      }
+      for (const [id, previous] of storedDrafts) {
+        if (!next.has(id) && merged.get(id) === previous) {
+          merged.delete(id);
+          changedOnDisk = true;
+        }
+      }
+
+      // A large recovery copy must not prevent saving the other drafts.
+      const serialized = [...merged.values()];
+      let copiesSaved = false;
+      if (recoveries.length) {
+        try {
+          localStorage.setItem(DRAFT_KEY, '[' + serialized.concat(recoveries.map(item => item.value)).join(',') + ']');
+          copiesSaved = true;
+        } catch { /* retry clean changes without the recovery copies */ }
+      }
+      if (!copiesSaved && changedOnDisk) localStorage.setItem(DRAFT_KEY, '[' + serialized.join(',') + ']');
+      storageFailed = false;
+
+      for (const {draft, current, copy, value} of recoveries) {
+        if (!copiesSaved) { localConflicts.add(draft); continue; }
+        next.delete(draft.id);
+        const index = drafts.indexOf(draft);
+        drafts.splice(index, 1, copy);
+        if (current) {
+          next.set(draft.id, current);
+          drafts.splice(index + 1, 0, normalizeDraft(JSON.parse(current)));
+        }
+        next.set(copy.id, value);
+        recoveredDrafts.set(draft, copy);
+        if (draft === active) {
+          active = copy;
+          observedBody = readBody(observedBody);
+          conflict = false;
+          prefs.activeId = copy.id;
+          savePrefs();
+          updateDocumentActions();
+          $('recover').hidden = true;
+          $('deployment').hidden = true;
+          showSaveState(copy);
+          status('检测到另一标签页的修改，当前内容已另存为本机恢复副本。');
+        }
+      }
+      if (copiesSaved) {
+        toast('保留了另一标签页的草稿，并为当前修改创建了本机恢复副本。', 6000);
+        renderListSoon();
+      }
+      storedDrafts.clear();
+      for (const [id, value] of next) storedDrafts.set(id, value);
+      for (const draft of drafts) {
+        if (!localConflicts.has(draft)) normalizedDrafts.set(draft, JSON.stringify(draft));
+      }
+      for (const draft of localConflicts) {
+        if (!drafts.includes(draft) || !recoveries.some(item => item.draft === draft)) localConflicts.delete(draft);
+      }
+      if (localConflicts.has(active)) {
+        setSaveState('error', '本机副本待保存');
+        status(localConflictMessage);
+        return false;
+      }
       return true;
     } catch {
       storageFailed = true;
@@ -93,12 +204,22 @@
   function persist() {
     clearTimeout(persistTimer);
     persistTimer = 0;
-    if (writeDrafts()) {
-      storageFailed = false;
-      if (!me) setSaveState('saved', '已保存 · ' + stamp());
-    }
+    const wasFailed = storageFailed;
+    if (!writeDrafts()) return false;
+    if (wasFailed) status('本机保存已恢复。');
+    if (!me) setSaveState('saved', '本机已保存 · ' + stamp());
+    return true;
   }
   function flushPersist() { if (persistTimer) persist(); }
+
+  function showSaveState(draft) {
+    if (storageFailed) setSaveState('error', '本机保存失败');
+    else if (localConflicts.has(draft)) { setSaveState('error', '本机副本待保存'); status(localConflictMessage); }
+    else if (draft.conflict) setSaveState('error', '版本冲突');
+    else if (me && draft.unsynced) setSaveState('dirty', '待同步');
+    else if (me && draft.cloud) setSaveState('cloud', '云端已保存');
+    else setSaveState('saved', '本机已保存');
+  }
 
   // ------------------------------------------------------------------- the form
   function tagValues(field) { return field === 'tags' ? active.tags : active.categories; }
@@ -138,14 +259,22 @@
     renderChips('categories', active.categories || []);
     renderChips('tags', active.tags || []);
     $('published').checked = active.published !== false;
-    $('publish').textContent = active.path ? '更新' : '发布';
-    $('publish-local').hidden = !!me;
+    updateDocumentActions();
     $('crumb-title').textContent = active.title || '无标题文章';
     document.title = (active.title || '写作室') + ' · 写作室';
     showExtras();
     fillParents();
     updatePropsVisibility();
   }
+  function updateDocumentActions() {
+    const canPublish = !!me && !active.recovery;
+    $('publish').textContent = active.path ? '更新' : '发布';
+    $('mobile-publish').textContent = $('publish').textContent;
+    for (const id of ['publish', 'mobile-publish', 'save-cloud']) $(id).hidden = !canPublish;
+    $('publish-local').hidden = canPublish;
+    $('export-state').hidden = canPublish;
+  }
+
   function updatePropsVisibility() {
     document.querySelector('.props-more').hidden = !extrasWanted;
     const toggle = $('props-toggle');
@@ -159,45 +288,60 @@
     button.textContent = '另有 ' + count + ' 项属性';
     button.title = '文件里还有其它 front matter 字段，导出时原样保留。';
   }
+  function readBody(body = editor.getValue()) {
+    const tree = active.recovery ? Tree.metadata({body}) : {};
+    if (tree.id) return Tree.stamp(body, active.id, tree.parent);
+    return /^[\s\u200B]*$/.test(body) ? '' : body;
+  }
   function commit() {
-    if (!ready || !active) return;
-    active.title = $('title').value.trim();
-    active.body = editor.getValue();
-    active.date = $('date').value || today();
-    for (const field of ['categories', 'tags']) {
-      const values = split($(field).value);
-      if (!values.length) continue;
-      const next = tagValues(field).slice();
-      for (const value of values) if (!next.includes(value)) next.push(value);
-      setTagValues(field, next);
+    if (!ready || !active) return false;
+    const body = bodyComposing ? observedBody : readBody();
+    const title = $('title').value.trim();
+    const date = $('date').value || today();
+    const published = $('published').checked;
+    if (body === observedBody && title === active.title && date === active.date && published === active.published) return false;
+    if (body !== observedBody) {
+      active.body = body;
+      observedBody = body;
     }
-    $('categories').value = '';
-    $('tags').value = '';
-    active.published = $('published').checked;
-    active.updated = new Date().toISOString();
+    active.title = title;
+    active.date = date;
+    active.published = published;
     $('crumb-title').textContent = active.title || '无标题文章';
     document.title = (active.title || '写作室') + ' · 写作室';
+    return true;
+  }
+  function markEdited(draft = active) {
+    editVersion += 1;
+    draftVersions.set(draft, draftVersion(draft) + 1);
+    if (cloudHost && !draft.recovery) draft.unsynced = true;
+    draft.updated = new Date().toISOString();
+    if (draft === active && !storageFailed && !localConflicts.has(draft)) setSaveState('dirty');
+  }
+  function scheduleCloud() {
+    if (!me || cloudLoading || conflict || !active.unsynced) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { flushEdit(); cloudSave().catch(() => {}); }, 1250);
   }
   function stateChanged() {
-    clearTimeout(savedTimer);
-    setSaveState('dirty', '正在保存…');
+    markEdited();
     schedulePersist();
     renderListSoon();
-    updateStats();
-    scheduleOutline();
-    if (me && !conflict) {
-      clearTimeout(syncTimer);
-      syncTimer = setTimeout(() => { flushEdit(); cloudSave().catch(() => {}); }, 1200);
-    }
+    scheduleCloud();
   }
   function flushEdit() {
-    if (!editTimer) return;
+    const pending = !!editTimer;
     clearTimeout(editTimer);
     editTimer = 0;
-    commit();
+    const committed = commit();
+    if (!pending && !committed) return;
+    if (!pending) markEdited();
     updateStats();
+    renderListSoon();
+    scheduleOutline();
     schedulePersist();
   }
+
   // An empty document has no caret target; give it one paragraph to start from.
   function ensureParagraph(body) {
     return /^[\s\u200B]*$/.test(body || '') ? '\u200B' : body;
@@ -205,23 +349,24 @@
 
   function applyDraft(draft) {
     active = draft;
+    prefs.activeId = draft.id;
+    savePrefs();
     conflict = !!draft.conflict;
     fillFields();
-    editor.setValue(ensureParagraph(draft.body));
+    applying = true;
+    try {
+      editor.setValue(ensureParagraph(draft.body));
+      observedBody = readBody();
+      bodyComposing = false;
+    } finally { applying = false; }
     editor.clearStack();
     updateStats();
     renderOutline();
     renderList();
     $('recover').hidden = !(me && (draft.path || draft.conflict));
-    flashSaved(true);
-  }
-  // A brief "saved" confirmation instead of a badge that stays "unsaved" while typing.
-  function flashSaved(immediate) {
-    clearTimeout(savedTimer);
-    savedTimer = setTimeout(() => {
-      if (me) { if (!active?.unsynced) setSaveState('cloud', '云端已保存'); }
-      else setSaveState('saved', '已保存');
-    }, immediate ? 30 : 820);
+    $('deployment').hidden = !draft.commit;
+    if (draft.commit) $('deployment').href = 'https://github.com/sleepy-m/sleepy-m.github.io/commit/' + draft.commit;
+    showSaveState(draft);
   }
 
   // --------------------------------------------------------------------- stats
@@ -232,7 +377,9 @@
   }
   function updateStats() {
     if (!ready) return;
-    const {chars, words, total} = wordCount(editor.getValue());
+    const body = editor.getValue();
+    const {chars, words, total} = wordCount(body);
+    $('body-placeholder').hidden = !/^[\s\u200B]*$/.test(body);
     const minutes = Math.max(1, Math.round(chars / 320 + words / 200));
     $('doc-stats').textContent = total ? total.toLocaleString('zh-CN') + ' 字 · 约 ' + minutes + ' 分钟' : '还没有内容';
     $('rail-stats').textContent = total ? total.toLocaleString('zh-CN') + ' 字' : '';
@@ -241,7 +388,7 @@
   function docSubtitle(draft) {
     const {total} = wordCount(draft.body || '');
     const when = draft.updated ? relativeTime(draft.updated) : '';
-    return [draft.cloud ? '云端' : '本机', total ? total.toLocaleString('zh-CN') + ' 字' : '', when].filter(Boolean).join(' · ');
+    return [draft.recovery ? '本机恢复副本' : draft.cloud ? '云端' : '本机', total ? total.toLocaleString('zh-CN') + ' 字' : '', when].filter(Boolean).join(' · ');
   }
   function relativeTime(iso) {
     const time = new Date(iso).getTime();
@@ -261,7 +408,7 @@
     for (const line of String(text || '').split('\n')) {
       if (/^\s*(```|~~~)/.test(line)) { fence = !fence; continue; }
       if (fence) continue;
-      const match = line.match(/^(#{1,4})\s+(.+?)\s*#*\s*$/);
+      const match = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
       if (match) result.push({level: match[1].length, text: match[2]});
     }
     return result;
@@ -282,21 +429,19 @@
       rail.append(empty);
       return;
     }
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const link = document.createElement('a');
       link.href = '#';
       link.className = 'outline-item level-' + item.level;
       link.textContent = item.text;
-      link.onclick = event => { event.preventDefault(); jumpToHeading(item.text); };
+      link.onclick = event => { event.preventDefault(); jumpToHeading(index); };
       rail.append(link);
     }
   }
-  function jumpToHeading(text) {
-    const root = document.querySelector('.vditor-ir .vditor-reset');
-    if (!root) return;
-    const heading = [...root.querySelectorAll('h1,h2,h3,h4')].find(element => element.textContent.replace(/\s+/g, ' ').trim() === text);
+  function jumpToHeading(index) {
+    const heading = editorRoot()?.querySelectorAll('h1,h2,h3,h4,h5,h6')[index];
     if (!heading) return;
-    heading.scrollIntoView({behavior: 'smooth', block: 'start'});
+    heading.scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start'});
     heading.classList.add('heading-flash');
     setTimeout(() => heading.classList.remove('heading-flash'), 900);
   }
@@ -393,66 +538,60 @@
 
   // ------------------------------------------------------------- editor events
   function changed() {
-    if (!ready || busy) return;
-    editVersion += 1;
-    clearTimeout(savedTimer);
-    setSaveState('dirty', '正在保存…');
+    if (!ready || busy || applying) return;
+    markEdited();
     clearTimeout(editTimer);
-    editTimer = setTimeout(() => {
-      editTimer = 0;
-      commit();
-      updateStats();
-      renderListSoon();
-      scheduleOutline();
-      schedulePersist();
-      flashSaved();
-    }, 420);
-    if (me && !conflict) {
-      clearTimeout(syncTimer);
-      syncTimer = setTimeout(() => { flushEdit(); cloudSave().catch(() => {}); }, 1500);
-    }
+    editTimer = setTimeout(flushEdit, 240);
+    scheduleCloud();
   }
-  // Vditor drops a second Enter on an otherwise empty line, which makes it
-  // impossible to add spacing. After typing pauses, put that blank line back.
-  function saveNow() {
-    if (!ready) return;
+  async function saveNow() {
+    if (!ready || busy) return;
+    commitTagInputs();
     flushEdit();
-    persist();
-    if (me) { clearTimeout(syncTimer); cloudSave().catch(() => {}); }
-    else toast('已保存到这台浏览器');
-    flashSaved();
+    const saved = persist();
+    if (me && !cloudLoading && !conflict && !active.recovery && !localConflicts.has(active)) {
+      clearTimeout(syncTimer);
+      try {
+        await cloudSave();
+        toast('已保存到云端');
+      } catch (error) { toast(error.message); }
+    } else if (saved) toast(active.recovery ? '已保存本机恢复副本' : conflict ? '已保存到这台浏览器，云端有版本冲突' : '已保存到这台浏览器');
   }
 
-  async function openDraft(draft) {
+  function leaveDraft() {
+    commitTagInputs();
+    flushEdit();
+    clearTimeout(syncTimer);
+    persist();
+    if (me && active.unsynced && !conflict) cloudSave().catch(() => {});
+  }
+
+  function openDraft(draft) {
     if (busy || !ready) return;
     if (innerWidth <= 960) closeSidebar();
     if (draft === active) return;
-    flushEdit();
-    clearTimeout(syncTimer);
-    if (me && active.unsynced && !conflict) await cloudSave().catch(() => {});
-    try { await queue; } catch { /* keep local */ }
+    leaveDraft();
     applyDraft(draft);
-    persist();
-    status(draft.unsynced ? '当前是未同步的本机备份。' : draft.cloud ? '已打开云端草稿' : '已打开本机草稿');
+    if (!storageFailed && !localConflicts.has(draft)) status(draft.recovery ? '已打开本机恢复副本。' : draft.conflict ? '云端有新版本，可先下载本机备份。' : draft.unsynced ? '已打开待同步的本机草稿。' : draft.cloud ? '已打开云端草稿' : '已打开本机草稿');
+    scheduleCloud();
   }
 
   function createDraft({title = '', body = '', date = '', categories = [], tags = [], published = true, entries = [], silent = false} = {}) {
     if (!ready || busy) return null;
-    flushEdit();
-    persist();
+    leaveDraft();
     const draft = normalizeDraft({
       id: crypto.randomUUID(), title, body, date: date || today(),
-      categories, tags, published, entries, updated: new Date().toISOString(),
+      categories, tags, published, entries, unsynced: cloudHost, updated: new Date().toISOString(),
     });
     drafts.unshift(draft);
     applyDraft(draft);
     if (!silent) {
-      status('新文章已建立，写完后自动保存。');
+      if (!storageFailed) status('新文章已建立，写完后自动保存。');
       $('title').focus();
       $('title').select();
     }
-    if (me) cloudSave().catch(() => {});
-    else { persist(); setSaveState('saved', '已保存 · ' + stamp()); }
+    persist();
+    if (title || body) scheduleCloud();
     return draft;
   }
 
@@ -472,41 +611,51 @@
     }
     return result;
   }
-  function cloudSave() {
-    if (!me || conflict || !ready) return queue;
-    flushEdit();
-    persist();
-    const draft = active;
+  function cloudSave(draft = active) {
+    if (!me || cloudLoading || draft.conflict || draft.recovery || !ready) return Promise.resolve();
+    if (draft === active) { flushEdit(); flushPersist(); }
+    if (!draft.unsynced && draft.revision) return Promise.resolve();
+    const version = draftVersion(draft);
+    const pending = pendingSync.get(draft);
+    if (pending?.version === version) return pending.request;
     const snapshot = {
       id: draft.id, title: draft.title, body: draft.body, date: draft.date,
       categories: draft.categories, tags: draft.tags, path: draft.path, baseSha: draft.baseSha,
     };
     draft.unsynced = true;
-    queue = queue.catch(() => {}).then(async () => {
-      if (draft.conflict) return;
+    writeDrafts();
+    if (recoveredDrafts.has(draft) || localConflicts.has(draft)) return Promise.reject(Error('当前内容保留在本机，请核对另一标签页的版本。'));
+    const request = queue.catch(() => {}).then(async () => {
+      if (draft.conflict || recoveredDrafts.has(draft) || localConflicts.has(draft)) throw Error('草稿存在版本冲突。');
+      if (draft === active && !busy && !storageFailed) setSaveState('saving');
       try {
         const result = await api('/api/drafts', 'PUT', {draft: snapshot, revision: draft.revision || 0});
+        if (recoveredDrafts.has(draft)) return;
         draft.revision = result.revision;
         draft.cloud = true;
-        const unchanged = draft.body === snapshot.body && draft.title === snapshot.title
-          && draft.date === snapshot.date
-          && JSON.stringify(draft.tags) === JSON.stringify(snapshot.tags)
-          && JSON.stringify(draft.categories) === JSON.stringify(snapshot.categories);
-        draft.unsynced = !unchanged;
-        writeDrafts();
-        if (draft === active) setSaveState('cloud', unchanged ? '云端已保存 · ' + stamp() : '仍有修改待同步');
-        renderListSoon();
+        draft.unsynced = draftVersion(draft) !== version;
+        if (writeDrafts() && draft === active && !busy) showSaveState(draft);
       } catch (error) {
+        if (recoveredDrafts.has(draft)) throw error;
         draft.unsynced = true;
-        if (error.status === 409) { draft.conflict = true; if (draft === active) conflict = true; }
-        writeDrafts();
-        if (draft === active) setSaveState('error', error.status === 409 ? '版本冲突' : '云端保存失败');
-        renderListSoon();
+        if (error.status === 409) {
+          draft.conflict = true;
+          if (draft === active) { conflict = true; $('recover').hidden = false; }
+        }
+        if (writeDrafts() && draft === active) {
+          setSaveState('error', draft.conflict ? '版本冲突' : '云端保存失败');
+          status(error.message);
+        }
         throw error;
+      } finally {
+        if (pendingSync.get(draft)?.request === request) pendingSync.delete(draft);
+        renderListSoon();
       }
     });
+    pendingSync.set(draft, {version, request});
+    queue = request;
     queue.catch(() => {});
-    return queue;
+    return request;
   }
   async function loadPosts() {
     $('posts-message').textContent = '正在读取博客文章……';
@@ -535,25 +684,20 @@
   }
   async function openPost(item, button) {
     if (busy || !ready) return;
-    flushEdit();
+    if (uploads) { toast('图片正在插入，请稍候。'); return; }
+    leaveDraft();
     controls(true);
     button.setAttribute('aria-busy', 'true');
     try {
-      if (me && active.unsynced) {
-        if (conflict) throw Error('当前草稿存在冲突，请先下载备份或读取最新版本。');
-        await cloudSave();
-      }
-      await queue;
       const existing = drafts.find(draft => draft.path === item.path);
       let draft = existing;
       if (!draft) {
         const loaded = await api('/api/post?path=' + encodeURIComponent(item.path));
-        draft = normalizeDraft({...loaded, entries: FrontMatter.parse(loaded.body).entries, cloud: true});
+        draft = normalizeDraft({...loaded, cloud: true});
+        drafts.unshift(draft);
       }
       applyDraft(draft);
       persist();
-      renderList();
-      if (!existing) await cloudSave();
       status(existing ? '已打开原文章；点“更新”才改动原文。' : '原文章已载入，点“更新”发布修改。');
       if (innerWidth <= 960) closeSidebar();
     } catch (error) {
@@ -570,55 +714,57 @@
     const activeAtStart = active;
     $('login').textContent = '登录云端同步';
     $('login').href = '/auth/login';
+    cloudLoading = true;
     try {
-      me = await api('/api/me');
+      const account = await api('/api/me');
+      const remote = await api('/api/drafts');
+      flushEdit();
+      me = account;
       $('account').textContent = me.login;
       $('login').hidden = true;
       $('logout').hidden = false;
-      $('publish').hidden = false;
-      $('publish-local').hidden = true;
-      $('save-cloud').hidden = false;
+      updateDocumentActions();
       $('posts-section').hidden = false;
-      $('mobile-publish').hidden = false;
       $('notice').hidden = true;
-      const remote = await api('/api/drafts');
       for (const draft of remote) {
         const local = drafts.find(item => item.id === draft.id);
         if (local?.unsynced) {
           local.cloud = true;
-          if (local.revision !== draft.revision) { local.conflict = true; local.unsynced = true; }
+          if (local.revision !== draft.revision) local.conflict = true;
         } else if (local) Object.assign(local, draft, {cloud: true, unsynced: false});
         else drafts.push(normalizeDraft({...draft, cloud: true, unsynced: false}));
       }
-      const next = drafts.find(draft => draft.unsynced) || drafts.find(draft => draft.cloud) || drafts[0];
-      if (editVersion === versionAtStart && active === activeAtStart) {
-        applyDraft(next);
-        setSaveState(next.conflict ? 'error' : 'cloud', next.conflict ? '版本冲突' : next.unsynced ? '待同步' : '云端已保存');
-        status(next.conflict ? '本机备份与云端版本冲突，请下载备份后读取最新版本。' : '云端已连接。');
-      } else {
-        commit();
+      const changedDuringConnect = editVersion !== versionAtStart || active !== activeAtStart;
+      const hasDraft = active.title || active.body.trim() || active.updated;
+      const next = hasDraft ? active : drafts.find(draft => draft.unsynced) || drafts.find(draft => draft.cloud) || active;
+      if (!changedDuringConnect) applyDraft(next);
+      else {
+        conflict = !!active.conflict;
         renderList();
-        persist();
-        status('云端已连接，连接期间的编辑已保留，正在同步。');
-        cloudSave().catch(() => {});
+        updateDocumentActions();
+        showSaveState(active);
       }
-      persist();
-      await loadPosts().catch(() => {});
+      if (persist()) status(active.conflict ? '本机与云端版本冲突，请下载备份后读取最新版本。' : '云端已连接，草稿将自动同步。');
+      loadPosts().catch(() => {});
     } catch (error) {
-      me = null;
       if (error.status === 401) {
-        setSaveState('saved', '本机保存');
-        status('未登录：草稿只保存在这台电脑。');
+        if (!storageFailed) status('未登录，草稿只保存在这台浏览器。');
       } else {
         toast('云端连接未完成：' + error.message);
-        status(error.message);
+        if (!storageFailed) status(error.message);
+      }
+    } finally {
+      cloudLoading = false;
+      if (me) for (const draft of drafts) {
+        if (draft.unsynced && !draft.conflict) cloudSave(draft).catch(() => {});
       }
     }
   }
   async function publish() {
-    if (!me || busy) return;
+    if (!me || busy || active.recovery) return;
     if (uploads) { toast('图片正在插入，请稍后再发布。'); return; }
     if (conflict) { toast('草稿有版本冲突，请先读取最新版本。'); return; }
+    commitTagInputs();
     flushEdit();
     if (!active.title.trim()) { toast('请先填写标题。'); $('title').focus(); return; }
     clearTimeout(syncTimer);
@@ -626,25 +772,28 @@
     setSaveState('saving', '正在发布…');
     try {
       await cloudSave();
-      await queue;
-      if (active.unsynced) throw Error('草稿尚未同步到云端，暂不发布。');
+      if (active.recovery || active.unsynced) throw Error('当前内容保留在本机，请核对云端版本后再发布。');
       status('正在提交文章和图片……');
       const result = await api('/api/publish', 'POST', {id: active.id, revision: active.revision});
-      Object.assign(active, result, {cloud: true, unsynced: false});
-      editor.setValue(result.body);
+      Object.assign(active, result, {cloud: true, published: true, unsynced: false});
+      applyDraft(active);
       persist();
       $('deployment').hidden = false;
       $('deployment').href = 'https://github.com/sleepy-m/sleepy-m.github.io/commit/' + result.commit;
-      status('已提交到 GitHub，网站正在构建；完成前仍可能看到旧版本。');
-      setSaveState('cloud', '已发布');
-      toast('已发布，网站正在构建。');
+      if (!storageFailed) status('已提交到 GitHub，网站正在构建；完成前仍可能看到旧版本。');
+      if (!storageFailed) setSaveState('cloud', '已提交，构建中');
+      toast('已提交，网站正在构建。');
+      const publishedDraft = active;
       let attempts = 0;
       const poll = async () => {
+        if (active !== publishedDraft || publishedDraft.commit !== result.commit) return;
         try {
           const run = await api('/api/deployment?sha=' + result.commit);
+          if (active !== publishedDraft || publishedDraft.commit !== result.commit) return;
           if (run.url) $('deployment').href = run.url;
           if (run.status === 'completed') {
-            status(run.conclusion === 'success' ? '发布成功，博客已更新。' : '文章已提交，但网站构建失败，请打开发布进度。');
+            if (!storageFailed) status(run.conclusion === 'success' ? '发布成功，博客已更新。' : '文章已提交，但网站构建失败，请打开发布进度。');
+            if (!storageFailed && !active.unsynced) setSaveState(run.conclusion === 'success' ? 'cloud' : 'error', run.conclusion === 'success' ? '博客已更新' : '网站构建失败');
             return;
           }
           if (run.status === 'unknown') { status('文章已提交，请点击“查看发布进度”确认。'); return; }
@@ -659,11 +808,11 @@
       setSaveState('error', '发布失败');
     } finally {
       controls(false);
-      flashSaved();
     }
   }
   async function recover() {
     if (!me || busy) return;
+    if (uploads) { toast('图片正在插入，请稍候。'); return; }
     flushEdit();
     controls(true);
     try {
@@ -694,17 +843,25 @@
   }
   async function logout() {
     if (busy || uploads) return;
+    commitTagInputs();
     flushEdit();
+    if (!persist() || localConflicts.size) { toast('请先导出仍待保存的本机修改。'); return; }
+    controls(true);
     try {
-      await cloudSave();
-      if (drafts.some(draft => draft.cloud && draft.unsynced)) throw Error('其他草稿仍有未同步修改，请先保存或下载备份。');
+      for (const draft of drafts) {
+        if (draft.unsynced && !draft.conflict) await cloudSave(draft);
+      }
+      if (drafts.some(draft => draft.unsynced)) throw Error('仍有草稿待同步，请先核对或下载备份。');
       await api('/api/logout', 'POST', {});
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts.filter(draft => !draft.cloud)));
-      location.reload();
+      try {
+        const latest = JSON.parse(localStorage.getItem(DRAFT_KEY) || '[]');
+        const kept = latest.filter(draft => !draft.cloud || draft.unsynced || storedDrafts.get(draft.id) !== JSON.stringify(draft));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(kept));
+      } finally { location.reload(); }
     } catch (error) {
       status('退出未完成：' + error.message);
       toast('退出未完成：' + error.message);
-    }
+    } finally { controls(false); }
   }
 
   // -------------------------------------------------------------- file exchange
@@ -723,6 +880,7 @@
   function exportDraft(withFrontMatter) {
     if (!ready) return;
     flushEdit();
+    commitTagInputs();
     const markdown = withFrontMatter ? FrontMatter.toMarkdown({...active, entries: active.entries}, active.body) : active.body;
     download(markdown, suggestFileName(active));
     toast(withFrontMatter ? '已下载，含标题、日期、分类、标签，可直接放进 source/_posts。' : '已下载纯正文。');
@@ -743,7 +901,7 @@
     });
     if (draft) {
       status(parsed.hasFrontMatter ? '已导入文章及其属性。' : '已导入正文，属性可以稍后填写。');
-      toast(parsed.hasFrontMatter ? '已导入文章属性。' : '已导入正文。');
+      toast('已导入为新草稿。');
     }
   }
   function splitDocument(text) {
@@ -754,18 +912,19 @@
 
   // ------------------------------------------------------------------ image I/O
   const IMAGE_TYPES = /^image\/(png|jpeg|webp|gif)$/;
-  async function prepareImage(file) {
+  const CLOUD_BODY_LIMIT = 1.5 * 1024 * 1024;
+  async function prepareImage(file, limit) {
     if (!IMAGE_TYPES.test(file.type)) throw Error('只支持 PNG、JPEG、WebP、GIF 图片。');
-    const limit = 2 * 1024 * 1024;
+    if (limit <= 0) throw Error('正文已接近云端容量上限，请先移除大图或使用图片链接。');
     if (file.type === 'image/gif') {
-      if (file.size > limit) throw Error('动图超过 2MB，请先压缩。');
+      if (file.size > limit) throw Error('动图超过剩余容量，请先压缩。');
       return file;
     }
     let bitmap;
     try { bitmap = await createImageBitmap(file); } catch { return file; }
     const longest = Math.max(bitmap.width, bitmap.height);
     const scale = Math.min(1, 1600 / longest);
-    if (scale === 1 && file.size <= 700 * 1024) { bitmap.close?.(); return file; }
+    if (scale === 1 && file.size <= Math.min(limit, 700 * 1024)) { bitmap.close?.(); return file; }
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -773,29 +932,47 @@
     context.imageSmoothingQuality = 'high';
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close?.();
-    const type = file.type === 'image/png' ? 'image/png' : 'image/webp';
+    const type = file.type === 'image/png' && file.size <= limit ? 'image/png' : 'image/webp';
     const blob = await new Promise(resolve => canvas.toBlob(resolve, type, 0.86));
     if (!blob || blob.size >= file.size) return file;
-    if (blob.size > limit) throw Error('图片压缩后仍超过 2MB，请换一张更小的图。');
     const extension = type === 'image/png' ? '.png' : '.webp';
     return new File([blob], (file.name || 'image').replace(/\.\w+$/, '') + extension, {type});
   }
-  async function insertImage(file) {
+  async function insertImage(file, draft = active) {
+    if (!ready || busy) return false;
+    const bodyAtStart = draft === active ? editor.getValue() : draft.body;
+    const limit = cloudHost ? Math.floor((CLOUD_BODY_LIMIT - new TextEncoder().encode(bodyAtStart).length - 512) * 0.75) : 2 * 1024 * 1024;
     uploads++;
     try {
-      const prepared = await prepareImage(file);
-      if (prepared.size > 2 * 1024 * 1024) throw Error('图片超过 2MB，请先压缩后再插入。');
+      const prepared = await prepareImage(file, limit);
+      if (prepared.size > limit) throw Error(cloudHost ? '图片超过剩余云端容量，请先压缩或使用图片链接。' : '图片超过 2MB，请先压缩后再插入。');
       const data = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
+        reader.onerror = () => reject(Error('图片读取失败，请重新插入。'));
         reader.readAsDataURL(prepared);
       });
       const alt = (prepared.name || '图片').replace(/\.[^.]+$/, '').replace(/[[\]]/g, '');
-      editor.insertValue('\n![' + alt + '](' + data + ')\n');
-      changed();
+      const markdown = '![' + alt + '](' + data + ')';
+      draft = recoveredDrafts.get(draft) || draft;
+      const isCurrent = draft === active;
+      const body = isCurrent ? editor.getValue() : draft.body;
+      if (cloudHost && new TextEncoder().encode(body + markdown + '\n\n').length > CLOUD_BODY_LIMIT) {
+        throw Error('图片超过剩余云端容量，请先压缩或使用图片链接。');
+      }
+      if (isCurrent) {
+        editor.insertValue('\n' + markdown + '\n');
+        changed();
+      } else {
+        draft.body = body.trimEnd() + '\n\n' + markdown + '\n';
+        markEdited(draft);
+        persist();
+        renderListSoon();
+        if (me) cloudSave(draft).catch(() => {});
+      }
       const ratio = Math.round(prepared.size / Math.max(1, file.size) * 100);
-      toast('图片已插入（' + Math.round(prepared.size / 1024) + 'KB' + (ratio < 100 ? '，已压缩到 ' + ratio + '%' : '') + '）。');
+      const target = isCurrent ? '' : '到《' + (draft.title || '无标题文章') + '》末尾';
+      toast('图片已插入' + target + '（' + Math.round(prepared.size / 1024) + 'KB' + (ratio < 100 ? '，已压缩到 ' + ratio + '%' : '') + '）。');
       return true;
     } catch (error) {
       toast(error.message);
@@ -809,9 +986,14 @@
     event.preventDefault();
     $('drop-hint').hidden = true;
     document.body.classList.remove('dropping');
+    if (!ready || busy) return;
+    const draft = active;
     for (const file of files) {
-      if (IMAGE_TYPES.test(file.type)) await insertImage(file);
-      else if (/\.(md|markdown|txt)$/i.test(file.name)) importMarkdown(await file.text(), file.name);
+      if (IMAGE_TYPES.test(file.type)) await insertImage(file, draft);
+      else if (/\.(md|markdown|txt)$/i.test(file.name)) {
+        try { importMarkdown(await file.text(), file.name); }
+        catch { toast('无法读取文件，请重新选择。'); }
+      }
     }
   }
 
@@ -1454,36 +1636,41 @@
   }
 
   // ---------------------------------------------------------------- boot & wire
+  function addTagValues(field, values) {
+    const current = tagValues(field);
+    const next = [...new Set([...current, ...values])];
+    if (next.length === current.length) return;
+    setTagValues(field, next);
+    stateChanged();
+  }
+
+  function commitTagInput(field) {
+    const input = $(field);
+    const values = split(input.value);
+    input.value = '';
+    addTagValues(field, values);
+    closeSuggestions(input);
+  }
+
+  function commitTagInputs() {
+    for (const field of ['categories', 'tags']) commitTagInput(field);
+  }
+
   function setupTags(field) {
     const input = $(field);
-    const addValues = values => {
-      if (!values.length) return;
-      const next = tagValues(field).slice();
-      for (const value of values) if (!next.includes(value)) next.push(value);
-      setTagValues(field, next);
-      stateChanged();
-      persist();
-    };
     input.addEventListener('keydown', event => {
-      if ((event.key === 'Enter' || event.key === ',' || event.key === '，') && !event.isComposing) {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Enter' || event.key === ',' || event.key === '，') {
         event.preventDefault();
-        const values = split(input.value);
-        input.value = '';
-        addValues(values);
-        closeSuggestions(input);
+        commitTagInput(field);
       }
       if (event.key === 'Backspace' && !input.value) {
         const current = tagValues(field);
-        if (current.length) { setTagValues(field, current.slice(0, -1)); stateChanged(); persist(); }
+        if (current.length) { setTagValues(field, current.slice(0, -1)); stateChanged(); }
       }
       if (event.key === 'Escape') closeSuggestions(input);
     });
-    input.addEventListener('blur', () => {
-      const values = split(input.value);
-      input.value = '';
-      addValues(values);
-      closeSuggestions(input);
-    });
+    input.addEventListener('blur', () => { if (ready && !busy) commitTagInput(field); });
     input.addEventListener('input', () => {
       const query = input.value.trim();
       const box = ensureSuggestions(input);
@@ -1501,7 +1688,7 @@
         option.addEventListener('click', () => {
           input.value = '';
           box.hidden = true;
-          addValues([value]);
+          addTagValues(field, [value]);
           input.focus();
         });
         box.append(option);
@@ -1524,8 +1711,8 @@
   }
 
   function boot() {
-    loadDrafts();
     applyPrefs();
+    if (cloudHost) $('other-writers').href = 'https://sleepy-m.github.io/admin/';
     $('new').onclick = () => createDraft();
     $('new-child').onclick = async () => {
       if (!ready || busy) return;
@@ -1553,7 +1740,7 @@
       $('crumb-title').textContent = $('title').value.trim() || '无标题文章';
     });
     $('title').addEventListener('keydown', event => {
-      if (event.key === 'Enter') { event.preventDefault(); editor.focus(); }
+      if (!event.isComposing && event.keyCode !== 229 && event.key === 'Enter' && ready && !busy) { event.preventDefault(); editor.focus(); }
     });
     $('date').addEventListener('change', () => { commit(); stateChanged(); });
     $('published').addEventListener('change', () => {
@@ -1570,6 +1757,7 @@
     };
     $('search').addEventListener('input', filterArticles);
     $('search').addEventListener('keydown', event => {
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'Escape') { $('search').value = ''; filterArticles(); $('search').blur(); }
       if (event.key === 'Enter') document.querySelector('#results .result, #drafts .doc-tree-line > button')?.click();
     });
@@ -1629,36 +1817,45 @@
     $('import').onclick = () => $('file').click();
     $('file').onchange = async () => {
       const file = $('file').files?.[0];
-      if (file) importMarkdown(await file.text(), file.name);
-      $('file').value = '';
+      if (!file) return;
+      try { importMarkdown(await file.text(), file.name); }
+      catch { toast('无法读取文件，请重新选择。'); }
+      finally { $('file').value = ''; }
     };
     $('export').onclick = () => exportDraft(true);
     $('export-body').onclick = () => exportDraft(false);
     $('publish-local').onclick = () => exportDraft(true);
-    $('save-cloud').onclick = () => { clearTimeout(syncTimer); cloudSave().catch(error => toast(error.message)); };
+    $('save-cloud').onclick = saveNow;
     $('publish').onclick = publish;
     $('recover').onclick = recover;
     $('logout').onclick = logout;
     $('refresh-posts').onclick = () => loadPosts().catch(error => toast(error.message));
     $('mobile-menu').onclick = () => openSidebar();
-    $('mobile-insert').onclick = () => {
+    const openInsertMenu = () => {
       if (!ready || busy) return;
       editor.focus();
       if (innerWidth <= 960) closeSidebar();
       slash?.open();
     };
-    $('mobile-save').onclick = () => {
-      saveNow();
-      $('mobile-save').textContent = '已保存 ✓';
-      setTimeout(() => { $('mobile-save').textContent = '保存'; }, 1400);
-    };
+    $('insert').onmousedown = event => event.preventDefault();
+    $('insert').onclick = openInsertMenu;
+    $('mobile-insert').onclick = openInsertMenu;
+    $('mobile-save').onclick = saveNow;
     $('mobile-publish').onclick = publish;
 
     document.addEventListener('keydown', event => {
-      if (event.isComposing || event.defaultPrevented) return;
+      if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return;
       const typing = !!document.activeElement?.closest?.('.vditor-reset, input, textarea, select');
       const meta = event.ctrlKey || event.metaKey;
       if (meta && event.key.toLowerCase() === 's') { event.preventDefault(); saveNow(); return; }
+      if (meta && event.shiftKey && event.key.toLowerCase() === 'f' && !busy) {
+        event.preventDefault();
+        if (document.body.classList.contains('focus-mode')) $('focus-mode').click();
+        openSidebar();
+        $('search').focus();
+        $('search').select();
+        return;
+      }
       if (ready && !typing && !meta && !event.altKey && event.key.toLowerCase() === 'n') { event.preventDefault(); createDraft(); return; }
       if (typing) return;
       if (!meta && !event.altKey && event.key === '/') {
@@ -1672,16 +1869,22 @@
     });
 
     window.addEventListener('pagehide', () => { if (ready) { flushEdit(); flushPersist(); } });
-    window.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { flushEdit(); flushPersist(); } });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { flushEdit(); flushPersist(); } });
     window.addEventListener('beforeunload', event => {
       if (!ready) return;
-      if ((me && active?.unsynced) || (active && editor.getValue() !== active.body)) {
+      flushEdit();
+      flushPersist();
+      if (storageFailed || localConflicts.size || (me && active?.unsynced) || bodyComposing) {
         event.preventDefault();
         event.returnValue = '';
       }
     });
     window.addEventListener('storage', event => {
-      if (event.key === DRAFT_KEY) toast('另一个标签页修改了草稿，切换前请确认要保留哪一份。', 6000);
+      if (event.key !== DRAFT_KEY || !active || !event.newValue) return;
+      try {
+        const other = JSON.parse(event.newValue).find(draft => draft?.id === active.id);
+        if (JSON.stringify(other) !== storedDrafts.get(active.id)) toast('另一标签页修改了当前草稿，可刷新页面读取新版。', 6000);
+      } catch { /* keep the current draft editable */ }
     });
     document.addEventListener('dragover', event => {
       if (!event.dataTransfer?.types?.includes('Files')) return;
@@ -1718,9 +1921,15 @@
         preview: {math: {engine: 'KaTeX'}, hljs: {style: 'github'}, markdown: {sanitize: true, codeBlockPreview: true}},
         upload: {
           accept: 'image/png,image/jpeg,image/webp,image/gif',
-          handler: async files => { for (const file of files) await insertImage(file); return null; },
+          handler: async files => {
+            const draft = active;
+            for (const file of files) await insertImage(file, draft);
+            return null;
+          },
         },
-        input: changed,
+        input: body => {
+          if (ready && !bodyComposing && readBody(body) !== observedBody) changed();
+        },
         // Only the / menu intercepts keys; anything else must reach Vditor
         // untouched, otherwise Vditor re-renders and the selection collapses.
         keydown: event => {
@@ -1728,11 +1937,17 @@
         },
         after: () => {
           ready = true;
+          observedBody = readBody();
+          for (const field of $('editor').querySelectorAll('.vditor-reset[contenteditable]')) {
+            field.setAttribute('role', 'textbox');
+            field.setAttribute('aria-label', '文章正文');
+            field.setAttribute('aria-multiline', 'true');
+            field.setAttribute('aria-placeholder', '从这里开始写');
+          }
           slash = buildSlashMenu();
           renderList();
           persist();
-          setSaveState('saved', '已保存');
-          status(storageFailed ? '本机保存不可用，请及时下载备份。' : '草稿自动保存在这台电脑');
+          if (!storageFailed) status('草稿自动保存在这台浏览器。');
           updateStats();
           renderOutline();
           connect();
@@ -1769,6 +1984,21 @@
       },
     });
     const root = $('editor');
+    // Vditor delays its input callback to group undo history. Track native
+    // changes promptly so saving or switching can flush the current editor.
+    root.addEventListener('input', event => {
+      if (!bodyComposing && !event.isComposing && event.target.closest?.('.vditor-reset')) changed();
+    }, true);
+    root.addEventListener('compositionstart', event => {
+      if (!event.target.closest?.('.vditor-reset')) return;
+      flushEdit();
+      bodyComposing = true;
+    }, true);
+    root.addEventListener('compositionend', event => {
+      if (!event.target.closest?.('.vditor-reset')) return;
+      bodyComposing = false;
+      changed();
+    }, true);
     editorAssist = attachEditorAssist(root);
     // The document sees every key first; the menu only consumes editing keys
     // while it is open, so normal typing and selections are never interrupted.
@@ -1787,9 +2017,10 @@
       if (!active.categories.length && parsed.categories.length) { setTagValues('categories', parsed.categories); filled.push('分类'); }
       if (!active.tags.length && parsed.tags.length) { setTagValues('tags', parsed.tags); filled.push('标签'); }
       if (parsed.date) $('date').value = parsed.date;
-      if (parsed.published === false) $('published').checked = false;
+      if (!me && parsed.published === false) $('published').checked = false;
       active.entries = parsed.entries;
       showExtras();
+      changed();
       try { items?.clearData(); } catch { /* clipboard write may be forbidden */ }
       try {
         event.clipboardData?.setData('text/plain', parsed.body);

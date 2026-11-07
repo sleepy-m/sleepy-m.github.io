@@ -22,4 +22,6 @@ hexo.extend.generator.register('self-hosted-fluid-assets',function(){
   for(const name of ['i18n','icons','lute','katex','highlight.js'])folder('vditor','dist/js/'+name,'vendor/vditor/dist/js/'+name);
   return result;
 });
-hexo.extend.filter.register('after_render:html',html=>html.replace(/(?:https?:)?\/\/at\.alicdn\.com\/t\/c\/font_1749284_5i9bdhy70f8\.css/g,'/css/site-icons.css'));
+hexo.extend.filter.register('after_render:html', html => html
+  .replace(/(?:https?:)?\/\/at\.alicdn\.com\/t\/c\/font_1749284_5i9bdhy70f8\.css/g, '/css/site-icons.css')
+  .replace(/(<div class="banner-text text-center fade-in-up">\s*<div class="h2")>/, '$1 role="heading" aria-level="1">'));

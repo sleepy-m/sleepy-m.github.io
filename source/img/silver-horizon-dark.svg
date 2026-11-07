@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 940" width="1920" height="940">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#111216"/>
+      <stop offset="1" stop-color="#191e2a"/>
+    </linearGradient>
+    <radialGradient id="light">
+      <stop stop-color="#303e59"/>
+      <stop offset="1" stop-color="#303e59" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="silk" x1=".13" y1=".94" x2=".73" y2=".12">
+      <stop stop-color="#141722"/>
+      <stop offset=".59" stop-color="#272f43"/>
+      <stop offset=".82" stop-color="#394865"/>
+      <stop offset="1" stop-color="#202637"/>
+    </linearGradient>
+    <linearGradient id="edge" x2="1" y2="0">
+      <stop stop-color="#7f99c9" stop-opacity="0"/>
+      <stop offset=".55" stop-color="#7f99c9" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#7f99c9" stop-opacity=".15"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1920v940H0z"/>
+  <ellipse fill="url(#light)" cx="1620" cy="610" rx="1040" ry="640"/>
+  <path fill="url(#silk)" d="M-20 852C420 879 675 802 1019 709S1660 451 1940 315v645H-20z"/>
+  <path fill="none" stroke="url(#edge)" stroke-width="2" d="M-20 852C420 879 675 802 1019 709S1660 451 1940 315"/>
+</svg>

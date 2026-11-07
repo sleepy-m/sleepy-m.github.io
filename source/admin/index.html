@@ -1,2 +1,93 @@
+---
+layout: false
+---
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=https://sleepym-blog-studio.2036681827.workers.dev/studio/"><title>进入云端写作工作台</title></head><body><h1>云端写作工作台</h1><p>使用 GitHub 账号 sleepy-m 登录。可以新建文章，也可以在“编辑已有文章”中修改原文。</p><a href="https://sleepym-blog-studio.2036681827.workers.dev/studio/">进入工作台</a><p>正在跳转。如果没有自动打开，请点击上面的链接。</p></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="light dark">
+  <title>写文章 · 我的个人博客</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --surface: #fff;
+      --page: #f5f5f7;
+      --ink: #1d1d1f;
+      --muted: #515154;
+      --accent: #005bb8;
+      --on-accent: #fff;
+      --border: #dedee2;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --surface: #222226;
+        --page: #171719;
+        --ink: #f5f5f7;
+        --muted: #c0c0c7;
+        --accent: #8cc9ff;
+        --on-accent: #172536;
+        --border: #414146;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font: 1rem/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    main { max-width: 66rem; margin: auto; padding: clamp(1.5rem, 6vw, 5rem) clamp(1rem, 4vw, 3rem); }
+    h1 { margin: 1.8rem 0 .25rem; font-size: clamp(2.2rem, 6vw, 3.75rem); line-height: 1.15; letter-spacing: -.045em; }
+    p { margin: .6rem 0; color: var(--muted); }
+    a { color: var(--accent); text-underline-offset: .2em; }
+    a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+    .options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1rem; margin-top: 2rem; }
+    .option {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 1.4rem;
+      border: 1px solid var(--border);
+      border-radius: 1.2rem;
+      background: var(--surface);
+    }
+    h2 { margin: 0; font-size: 1.2rem; }
+    .option p { margin-bottom: 1rem; }
+    .option a { margin-top: auto; font-weight: 600; }
+    .option .action {
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      padding: .5rem .95rem;
+      text-decoration: none;
+    }
+    .option .primary { background: var(--accent); color: var(--on-accent); }
+    .option .action:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="/">返回博客</a>
+    <h1>写文章</h1>
+    <p>跨设备续写用云端工作台。想直接开始写，打开浏览器草稿。</p>
+    <div class="options">
+      <section class="option">
+        <h2>云端工作台</h2>
+        <p>用 GitHub 登录，跨设备保存草稿、编辑旧文章，并发布到博客。</p>
+        <a class="action primary" href="https://sleepym-blog-studio.2036681827.workers.dev/studio/">打开云端工作台</a>
+      </section>
+      <section class="option">
+        <h2>浏览器草稿</h2>
+        <p>直接打开编辑器。草稿保存在当前浏览器，可导出为 Markdown。</p>
+        <a class="action" href="/studio/">开始写作</a>
+      </section>
+      <section class="option">
+        <h2>Pages CMS</h2>
+        <p>云端工作台无法打开时，可用 GitHub 登录修改仓库中的文章。保存到公开仓库的原稿可被访问。</p>
+        <a href="https://app.pagescms.org/sleepy-m/sleepy-m.github.io/main">打开 Pages CMS</a>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

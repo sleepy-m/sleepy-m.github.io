@@ -14,27 +14,37 @@ navbar:
     - {key: tag, name: 标签, link: /tags/}
     - {key: about, name: 关于, link: /about/}
     - {key: writing, name: 写作帮助, link: /writing/}
-    - {key: admin, name: 写文章, link: 'https://sleepym-blog-studio.2036681827.workers.dev/studio/'}
+    - {key: admin, name: 写文章, link: /admin/}
 dark_mode:
   enable: true
   default: auto
+banner:
+  parallax: false
 color:
-  body_bg_color: '#f1f5f9'
-  body_bg_color_dark: '#101923'
-  navbar_bg_color: '#253d57'
-  navbar_bg_color_dark: '#17293d'
-  text_color: '#334155'
-  text_color_dark: '#cbd5e1'
+  body_bg_color: '#f5f5f7'
+  body_bg_color_dark: '#101114'
+  navbar_bg_color: '#ffffff'
+  navbar_bg_color_dark: '#17181d'
+  navbar_text_color: '#1d1d1f'
+  navbar_text_color_dark: '#f5f5f7'
+  subtitle_color: '#1d1d1f'
+  subtitle_color_dark: '#f5f5f7'
+  text_color: '#25262b'
+  text_color_dark: '#e5e5ea'
+  sec_text_color: '#60636b'
+  sec_text_color_dark: '#aeb0ba'
   board_color: '#ffffff'
-  board_color_dark: '#1a2939'
-  post_text_color: '#334155'
-  post_text_color_dark: '#cbd5e1'
-  post_heading_color: '#18334d'
-  post_heading_color_dark: '#e1edf9'
-  post_link_color: '#376f9c'
-  post_link_color_dark: '#8cbfe6'
-  link_hover_color: '#5794c3'
-  link_hover_color_dark: '#b9dcf7'
+  board_color_dark: '#191b20'
+  post_text_color: '#303138'
+  post_text_color_dark: '#dedee5'
+  post_heading_color: '#1d1d1f'
+  post_heading_color_dark: '#f5f5f7'
+  post_link_color: '#005bb9'
+  post_link_color_dark: '#85baff'
+  link_hover_color: '#005bb9'
+  link_hover_color_dark: '#a7ceff'
+  line_color: '#e5e5ea'
+  line_color_dark: '#343640'
 font:
   font_size: 16px
   font_family: '"Inter Variable", "Noto Sans SC Variable", "Microsoft YaHei", sans-serif'
@@ -48,8 +58,8 @@ custom_css:
 custom_js:
   - /js/personal.js
 index:
-  banner_img: /img/blue-horizon.svg
-  banner_img_height: 66
+  banner_img: /img/silver-horizon.svg
+  banner_img_height: 60
   banner_mask_alpha: 0.15
   slogan:
     enable: true
@@ -59,7 +69,7 @@ index:
     length: 150
   post_url_target: _self
 post:
-  banner_img: /img/blue-horizon.svg
+  banner_img: /img/silver-horizon.svg
   banner_img_height: 42
   banner_mask_alpha: 0.28
   meta:
@@ -79,16 +89,16 @@ post:
   footnote:
     enable: false
 archive:
-  banner_img: /img/blue-horizon.svg
+  banner_img: /img/silver-horizon.svg
   banner_img_height: 42
 category:
-  banner_img: /img/blue-horizon.svg
+  banner_img: /img/silver-horizon.svg
   banner_img_height: 42
 tag:
-  banner_img: /img/blue-horizon.svg
+  banner_img: /img/silver-horizon.svg
   banner_img_height: 42
 about:
-  banner_img: /img/blue-horizon.svg
+  banner_img: /img/silver-horizon.svg
   banner_img_height: 42
   avatar: /img/blog-mark.svg
   name: sleepy-m
@@ -96,10 +106,10 @@ about:
   icons:
     - {class: '', link: 'https://github.com/sleepy-m', tip: GitHub}
 page:
-  banner_img: /img/blue-horizon.svg
+  banner_img: /img/silver-horizon.svg
   banner_img_height: 42
 page404:
-  banner_img: /img/blue-horizon.svg
+  banner_img: /img/silver-horizon.svg
   banner_img_height: 60
 footer:
   content: '© 2026 sleepy-m · 记录、学习与分享 · <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="noopener">Fluid</a>'
@@ -112,7 +122,7 @@ fun_features:
     enable: true
   progressbar:
     enable: true
-    color: '#8cbfe6'
+    color: '#3684d8'
 code:
   copy_btn: true
   highlight:

@@ -1,6 +1,6 @@
 # 个人博客
 
-使用 Hexo + Fluid + GitHub Pages，主编辑方式为 Pages CMS 在线可视化后台。文章底层仍使用 Markdown。
+使用 Hexo + Fluid + GitHub Pages。文章以 Markdown 保存。
 
 ## 写作工作台（/studio/）
 
@@ -10,7 +10,7 @@
 - 卡片式排版：左侧文章列表、中间正文卡片、右侧大纲（窄屏自动收起，手机为抽屉 + 底部操作栏）。
 - 选中任意文字浮出格式条：加粗、斜体、删除线、行内代码、链接，以及标题、引用、列表、待办。
 - 行首输入 `/` 打开插入菜单（标题、表格、公式、图片、摘要分隔……），支持中文输入法筛选。
-- 标题、日期、分类、标签、父文档、“已发布”开关常驻可见；分类和标签是胶囊，回车成块，可点 × 删除。
+- 标题、日期、分类和标签可在正文上方填写。父文档和 Markdown 导出状态在“更多属性”中。
 - 粘贴网页富文本自动转成干净 Markdown；粘贴图片自动压缩到 1600px / 2MB 以内再内嵌。
 - 粘贴或拖入带 front matter 的 `.md` 会回填标题、日期、分类、标签，其它字段（如 `math: true`）原样保留。
 - 外观可切换“跟随系统 / 浅色 / 深色”，另有专注写作、宽屏、打字机模式和大纲开关。
@@ -24,16 +24,22 @@
 `cloud/` 下的 Cloudflare Worker 提供 GitHub 登录、跨电脑草稿和直接发布，`/studio/` 在云端域名下会自动接管登录与发布按钮。
 未部署时使用的是本机模式，和上面的写作工作台是同一套代码。
 
-## 外观方案 A
+## 博客外观
 
-2026-10-14 应用 Fluid、蓝灰配色、本站 SVG 山峦封面和明暗切换。中文使用思源黑体同源的 Noto Sans SC Variable，英文 Inter Variable，代码 JetBrains Mono。
+首页使用银白蓝灰背景和本站 SVG 封面，深色模式切换为石墨色背景。中文使用 Noto Sans SC Variable，英文使用 Inter Variable，代码使用 JetBrains Mono。
 字体、核心脚本、代码复制和 KaTeX 样式均随站托管。文章阅读进度条和轻量圆环光标已开启；触屏或 prefers-reduced-motion 模式不启用光标动画。
 外观配置：`_config.fluid.yml`，自定义样式：`source/css/personal.css`，交互：`source/js/personal.js`，静态字体与脚本由 `scripts/fluid-assets.js` 从锁定依赖生成。
 原 NexT 配置保留在 `_config.next.yml`，可通过历史版本恢复。
 
 ## 日常使用
 
-在任何电脑打开 https://sleepy-m.github.io/admin/ ，自动进入 https://app.pagescms.org/sleepy-m/sleepy-m.github.io/main 。
+打开 https://sleepy-m.github.io/admin/ ，按需要选择写作方式。
+
+- 云端工作台支持 GitHub 登录、跨设备草稿、编辑旧文章和发布。
+- 浏览器草稿可以直接写作，内容自动保存在当前浏览器，也可以导出 Markdown。
+- Pages CMS 是云端工作台无法访问时的备用后台。
+
+### 使用 Pages CMS
 使用 GitHub 账号 sleepy-m 登录。该账号已连接 Pages CMS，后台按 GitHub 仓库权限验证编辑资格。不要额外邀请协作者或授权其他账号。
 进入“写文章”，点击 Add new 新建文章；正文可视化编辑，图片可以直接上传。
 新文章默认“保存后发布到博客”打开：写完点一次 Save 就自动构建发布；日期自动填写，分类和标签可留空。
@@ -53,13 +59,13 @@
 3. 双击 `发布博客.cmd`，核对修改并确认发布。GitHub Actions 成功后网站更新。
 
 文章在 `source/_posts`，个人介绍在 `source/about/index.md`。
-博客名称、作者和网址在 `_config.yml`，导航和主题在 `_config.next.yml`。
+博客名称、作者和网址在 `_config.yml`，Fluid 导航和主题在 `_config.fluid.yml`。
 示例文章可以直接修改或删除。
 
 ## 网站与发布
 
 Markdown 由 hexo-renderer-markdown-it 渲染，数学公式使用 KaTeX。支持 `$...$` 行内公式和 `$$...$$` 独立公式，不需要逐篇开启。公式字体和样式随本站托管。
-写法与示例：https://sleepy-m.github.io/writing/ 。在线编辑器的公式请在 Source 模式输入，数学渲染发生在生成的博客页面上，不能保证第三方编辑器实时预览。
+写法与示例见 https://sleepy-m.github.io/writing/ 。写作工作台的插入菜单支持公式，Pages CMS 可在 Source 模式输入公式。
 
 已于 2026-10-13 发布到 https://sleepy-m.github.io/ ，仓库为 https://github.com/sleepy-m/sleepy-m.github.io 。
 账号使用本机已登录的 `sleepy-m`。GitHub Pages 已设置为 GitHub Actions 自动构建。

@@ -44,7 +44,7 @@ layout: false
   </div>
  </div>
 </header>
-<div class="notice" id="notice"><span>本机模式：草稿只存在这台浏览器里。重要内容请用“导出”下载备份，或打开云端工作台登录同步。</span><button id="notice-close" class="icon-button" aria-label="关闭提示" title="关闭提示">×</button></div>
+<div class="notice" id="notice"><span>草稿自动保存在此浏览器。用“导出”下载备份，或通过左栏登录云端同步。</span><button id="notice-close" class="icon-button" aria-label="关闭提示" title="关闭提示">×</button></div>
 <div class="workspace">
  <aside class="sidebar">
   <button id="close-sidebar" class="icon-button sidebar-close" aria-label="收起文章栏" title="收起文章栏">×</button>
@@ -66,6 +66,7 @@ layout: false
   <div class="aside-foot">
    <a class="cloud-link" id="login" href="https://sleepym-blog-studio.2036681827.workers.dev/studio/">登录云端同步 ↗</a>
    <button id="logout" hidden class="text-button">退出登录</button>
+   <a class="cloud-link" id="other-writers" href="/admin/">其他写作方式 ↗</a>
    <p class="aside-hint">草稿自动保存在本机，发布才更新博客。</p>
   </div>
  </aside>
@@ -80,17 +81,18 @@ layout: false
     </div>
     <div class="props-more" hidden>
      <label class="meta-field"><span>父文档</span><select id="parent-doc" aria-label="所属父文档"></select></label>
-     <label class="meta-toggle" title="关闭时文件带 published: false，博客不会显示它"><input id="published" type="checkbox"><span>已发布</span></label>
+     <label class="meta-toggle" id="export-state" title="关闭后，导出的 Markdown 会带有 published: false"><input id="published" type="checkbox"><span>导出为可发布文章</span></label>
      <button id="extra-fields" class="extra-fields" hidden></button>
     </div>
     <button id="props-toggle" class="props-toggle" aria-expanded="false" title="更多文章属性">更多属性</button>
    </div>
-   <div class="editor-slot"><div id="editor"></div></div>
+   <div class="editor-actions"><button id="insert" class="ghost" type="button" title="插入标题、表格、公式或图片">＋ 插入</button></div>
+   <div class="editor-slot"><div id="editor"></div><span id="body-placeholder" class="body-placeholder" aria-hidden="true" hidden>从这里开始写…</span></div>
    <div class="empty-hint" id="empty-hint" hidden><kbd>/</kbd> 插入标题、表格、图片 · <kbd>?</kbd> 查看快捷键</div>
    <footer class="doc-footer">
     <span id="doc-stats">0 字</span>
     <span id="status" role="status">正在加载编辑器……</span>
-    <span class="footer-hint"><kbd>⌘S</kbd> 保存 · <kbd>/</kbd> 插入 · <kbd>?</kbd> 快捷键</span>
+    <span class="footer-hint"><kbd>Ctrl / ⌘ + S</kbd> 保存 · <kbd>/</kbd> 插入 · <kbd>?</kbd> 快捷键</span>
    </footer>
   </article>
   <div class="publish-bar"><button id="recover" hidden>保留备份并读取最新版本</button><a id="deployment" hidden target="_blank" rel="noopener">查看发布进度 ↗</a></div>
