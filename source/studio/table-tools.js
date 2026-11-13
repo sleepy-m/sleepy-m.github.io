@@ -32,7 +32,13 @@
   }).join('\n');
  }
 
- window.StudioTableTools={normalizeSeparators,tables,mount({root,getValue,setValue,onChange,isBusy}){
+ function serialize(rows,align,widths,heights){
+  const escape=value=>String(value??'').replace(/\r?\n/g,'<br>').replace(/(?<!\\)\|/g,'\\|');
+  const line=row=>'| '+row.map(escape).join(' | ')+' |';
+  const rule=value=>(value.startsWith(':')?':':'')+'---'+(value.endsWith(':')?':':'');
+  return'<!-- studio-table-layout '+JSON.stringify({widths,heights})+' -->\n'+[line(rows[0]),line(align.map(rule)),...rows.slice(1).map(line)].join('\n');
+ }
+ window.StudioTableTools={normalizeSeparators,tables,serialize,mount({root,getValue,setValue,onChange,isBusy}){
   const toolbar=document.createElement('div');toolbar.className='table-context-tools';toolbar.setAttribute('role','toolbar');toolbar.setAttribute('aria-label','当前单元格的表格操作');toolbar.hidden=true;
   const handles=document.createElement('div');handles.className='table-column-handles';handles.setAttribute('role','group');handles.setAttribute('aria-label','表格行列选择与尺寸调整');
   document.body.append(toolbar,handles);
@@ -82,12 +88,6 @@
    const heights=Array.from({length:domTable.rows.length},(_,i)=>clamp(Number(parsed?.meta.heights?.[i])||domTable.rows[i]?.getBoundingClientRect().height||56,44,500));
    return{widths,heights};
   }
-  function serialize(rows,align,widths,heights){
-   const escape=value=>String(value??'').replace(/<br\s*\/?>/gi,' ').replace(/\r?\n/g,' ').replace(/(?<!\\)\|/g,'\\|');
-   const line=row=>'| '+row.map(escape).join(' | ')+' |';
-   const rule=value=>(value.startsWith(':')?':':'')+'---'+(value.endsWith(':')?':':'');
-   return'<!-- studio-table-layout '+JSON.stringify({widths,heights})+' -->\n'+[line(rows[0]),line(align.map(rule)),...rows.slice(1).map(line)].join('\n');
-  }
   function writeTable(index,mutate,focus){
    if(isBusy())return false;
    const source=getValue(),items=tables(source),table=items[index];if(!table)return false;
@@ -103,17 +103,15 @@
    current={index,row:clamp(focus.row,0,rows.length-1),col:clamp(focus.col,0,align.length-1),table:null};
    selectionKind='cell';
    anchor={index,row:current.row,col:current.col};selected={index,r0:current.row,r1:current.row,c0:current.col,c1:current.col};
-   setTimeout(()=>{
-    const next=visibleTables()[index];if(!next)return;
-    current.table=next;focusCell(next,current.row,current.col);place();
-   },80);
+   const next=visibleTables()[index];
+   if(next){current.table=next;focusCell(next,current.row,current.col);place();}
    return true;
   }
   function focusCell(table,row,col){
    const cell=table.rows[row]?.cells[col];if(!cell)return;
    const roots=[...root.querySelectorAll('.vditor-ir .vditor-reset,.vditor-wysiwyg .vditor-reset,.vditor-sv .vditor-reset')];
    const editor=roots.find(node=>node.isConnected&&node.getClientRects().length&&node.isContentEditable)||roots.find(node=>node.isConnected&&node.getClientRects().length);
-   editor?.focus();
+   editor?.focus({preventScroll:true});
    const range=document.createRange();range.selectNodeContents(cell);range.collapse(false);
    const selection=getSelection();selection.removeAllRanges();selection.addRange(range);
    choose(cellAt(cell));
@@ -123,10 +121,28 @@
    button.addEventListener('mousedown',event=>event.preventDefault());button.addEventListener('click',handler);return button;
   }
   async function copyText(text){
-   try{await navigator.clipboard.writeText(text);}catch{
-    const field=document.createElement('textarea');field.value=text;field.style.cssText='position:fixed;opacity:0;pointer-events:none';document.body.append(field);field.select();document.execCommand('copy');field.remove();
+   try{await navigator.clipboard.writeText(text);return true;}catch{
+    const selection=getSelection(),saved=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null,focused=document.activeElement;
+    const field=document.createElement('textarea');field.value=text;field.style.cssText='position:fixed;opacity:0;pointer-events:none';document.body.append(field);field.select();
+    const copied=document.execCommand('copy');field.remove();focused?.focus({preventScroll:true});
+    if(saved&&saved.startContainer.isConnected){selection.removeAllRanges();selection.addRange(saved);}
+    return copied;
    }
   }
+  // Vditor's generated inline handlers are blocked by the studio CSP. Use one
+  // delegated handler for mouse and keyboard, without weakening that policy.
+  root.addEventListener('click',async event=>{
+   const button=event.target.closest?.('.vditor-copy span');if(!button||!root.contains(button))return;
+   const code=button.closest('.vditor-ir__preview')?.querySelector('code');if(!code)return;
+   event.preventDefault();event.stopImmediatePropagation();
+   const copied=await copyText(code.textContent);
+   button.setAttribute('aria-label',copied?'已复制':'复制失败，请选中代码后复制');
+   setTimeout(()=>{if(button.isConnected)button.setAttribute('aria-label','复制代码');},1800);
+  },true);
+  root.addEventListener('keydown',event=>{
+   if(!['Enter',' '].includes(event.key)||!event.target.matches?.('.vditor-copy span'))return;
+   event.preventDefault();event.stopImmediatePropagation();event.target.click();
+  },true);
   function selectionBounds(){
    if(current.table?.isConnected){
     const cells=[...current.table.querySelectorAll('.studio-table-selected')];
@@ -273,6 +289,14 @@
   }
   function updateLayout(){
    if(isBusy())return;
+   for(const button of root.querySelectorAll('.vditor-copy span')){
+    button.removeAttribute('onclick');button.removeAttribute('onmouseover');
+    button.setAttribute('role','button');button.tabIndex=0;
+    if(!button.hasAttribute('aria-label')||button.getAttribute('aria-label')==='复制')button.setAttribute('aria-label','复制代码');
+   }
+   for(const inline of root.querySelectorAll('td [data-type="html-inline"],th [data-type="html-inline"]')){
+    inline.classList.toggle('studio-cell-break',/^<br\s*\/?>$/i.test(inline.textContent.trim()));
+   }
    for(const code of root.querySelectorAll('code[data-type="html-block"]')){
     const text=code.textContent.trim();
     if(text.match(marker)||/^<!-- studio-document \{[^\n]*\} -->$/.test(text))code.parentElement.classList.add('studio-table-meta');
@@ -288,7 +312,12 @@
    const active=visibleTables()[current.index];
    if(current.index>=0&&active){current.table=active;place();}
   }
-  function schedulePlace(){clearTimeout(placeTimer);placeTimer=setTimeout(()=>{if(selectionKind!=='cell'){place();return;}const hit=selectionCell();if(hit)choose(hit);else place();},40);}
+  function schedulePlace(){clearTimeout(placeTimer);placeTimer=setTimeout(()=>{
+   const hit=selectionCell();
+   if(hit){if(selectionKind!=='cell')place();else choose(hit);return;}
+   if(selectionDrag||dragging)return;
+   current={index:-1,row:0,col:0,table:null};selectionKind='cell';toolbar.hidden=true;clearHandles();
+  },40);}
   new MutationObserver(()=>{clearTimeout(layoutTimer);layoutTimer=setTimeout(updateLayout,100);}).observe(root,{childList:true,subtree:true,characterData:true});
   root.addEventListener('click',event=>{
    const hit=cellAt(event.target);
@@ -306,7 +335,7 @@
    document.addEventListener('pointermove',selectionHandleAtPoint,true);document.addEventListener('pointerup',finishSelectionDrag,true);document.addEventListener('pointercancel',finishSelectionDrag,true);
   },true);
   root.addEventListener('keydown',event=>{
-   if(event.key!=='Tab'||event.defaultPrevented)return;
+   if(event.key!=='Tab'||event.defaultPrevented||event.isComposing||isBusy())return;
    const hit=cellAt(event.target)||selectionCell();if(!hit)return;
    event.preventDefault();event.stopPropagation();
    const rowCount=hit.table.rows.length,colCount=hit.table.rows[0]?.cells.length||1;
@@ -314,9 +343,9 @@
    if(index<0)return;
    if(index>=total){writeTable(hit.index,data=>{data.rows.push(data.align.map(()=>''));data.heights.push(56);},{row:rowCount,col:0});return;}
    focusCell(hit.table,Math.floor(index/colCount),index%colCount);
-  });
+  },true);
   root.addEventListener('paste',event=>{
-   const hit=cellAt(event.target),text=event.clipboardData?.getData('text/plain')||'';
+   const hit=cellAt(event.target)||selectionCell(),text=event.clipboardData?.getData('text/plain')||'';
    if(!hit||!/[\t\n]/.test(text))return;
    event.preventDefault();
    const matrix=text.replace(/\r\n?/g,'\n').split('\n');if(matrix[matrix.length-1]==='')matrix.pop();

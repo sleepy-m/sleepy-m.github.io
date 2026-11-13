@@ -280,6 +280,9 @@ kbd{font-family:var(--mono);font-size:.82em;background:var(--paper-2);border:1px
 .outline-item.level-2{padding-left:14px}
 .outline-item.level-3{padding-left:24px;font-size:11.5px}
 .outline-item.level-4{padding-left:34px;font-size:11.5px;color:var(--faint)}
+.outline-item.level-5{padding-left:44px;font-size:11.5px;color:var(--faint)}
+.outline-item.level-6{padding-left:54px;font-size:11.5px;color:var(--faint)}
+.vditor-reset h1,.vditor-reset h2,.vditor-reset h3,.vditor-reset h4,.vditor-reset h5,.vditor-reset h6{scroll-margin-top:80px}
 .outline-empty{font-size:11px;color:var(--faint);margin:2px 8px;line-height:1.7}
 .rail-stats{margin-top:auto;font-size:10.5px;color:var(--faint);padding-left:10px}
 

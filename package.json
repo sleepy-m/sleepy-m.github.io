@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "test": "node --test cloud/*.test.cjs cloud/*.test.mjs",
     "build": "hexo generate",
     "preview": "hexo server --ip 127.0.0.1",
     "clean": "hexo clean",

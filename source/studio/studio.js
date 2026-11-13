@@ -24,6 +24,51 @@
   let queue = Promise.resolve();
   let prefs = loadPrefs();
   let extrasWanted = false;
+  // Vditor is pinned to 3.11.2. Keep its DOM and undo state together when
+  // switching documents; history stays in memory and is never sent to cloud.
+  const documentSessions = new Map();
+  function rememberDocument() {
+    if (!ready || !active) return;
+    const root = editorRoot();
+    if (!root) return;
+    const path = node => {
+      const result = [];
+      while (node && node !== root) { result.unshift([...node.parentNode.childNodes].indexOf(node)); node = node.parentNode; }
+      return node === root ? result : null;
+    };
+    const selection = getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const start = range && root.contains(range.startContainer) ? path(range.startContainer) : null;
+    const end = range && root.contains(range.endContainer) ? path(range.endContainer) : null;
+    documentSessions.delete(active.id);
+    documentSessions.set(active.id, {
+      body: readBody(), html: root.innerHTML, undo: structuredClone(editor.vditor.undo.ir),
+      selection: start && end ? {start, end, startOffset: range.startOffset, endOffset: range.endOffset} : null,
+      scroll: window.scrollY,
+    });
+    if (documentSessions.size > 8) documentSessions.delete(documentSessions.keys().next().value);
+  }
+
+  function restoreDocument(draft) {
+    const session = documentSessions.get(draft.id);
+    if (!session || session.body !== draft.body) return false;
+    const root = editorRoot();
+    root.innerHTML = session.html;
+    editor.vditor.undo.ir = structuredClone(session.undo);
+    editor.vditor.undo.resetIcon(editor.vditor);
+    if (session.selection) {
+      const locate = path => path.reduce((node, index) => node?.childNodes[index], root);
+      const saved = session.selection, start = locate(saved.start), end = locate(saved.end);
+      if (start && end) {
+        const range = document.createRange();
+        range.setStart(start, saved.startOffset); range.setEnd(end, saved.endOffset);
+        root.focus({preventScroll: true});
+        const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      }
+    }
+    window.scrollTo(0, session.scroll);
+    return true;
+  }
 
   // ---------------------------------------------------------------- utilities
   function loadPrefs() {
@@ -348,6 +393,7 @@
   }
 
   function applyDraft(draft) {
+    rememberDocument();
     active = draft;
     prefs.activeId = draft.id;
     savePrefs();
@@ -360,6 +406,7 @@
       bodyComposing = false;
     } finally { applying = false; }
     editor.clearStack();
+    if (!restoreDocument(draft)) window.scrollTo(0, 0);
     updateStats();
     renderOutline();
     renderList();
@@ -402,16 +449,16 @@
   }
 
   // ------------------------------------------------------------------- outline
+  function headingText(heading) {
+    const copy = heading.cloneNode(true);
+    copy.querySelectorAll('.vditor-ir__marker').forEach(node => node.remove());
+    return copy.textContent.replace(/\u200b/g, '').trim();
+  }
   function headingsOf(text) {
-    const result = [];
-    let fence = false;
-    for (const line of String(text || '').split('\n')) {
-      if (/^\s*(```|~~~)/.test(line)) { fence = !fence; continue; }
-      if (fence) continue;
-      const match = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
-      if (match) result.push({level: match[1].length, text: match[2]});
-    }
-    return result;
+    if (!editor?.vditor?.lute) return [];
+    const template = document.createElement('template');
+    template.innerHTML = editor.vditor.lute.Md2VditorIRDOM(text);
+    return [...template.content.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(heading => ({level: Number(heading.tagName[1]), text: headingText(heading)}));
   }
   function scheduleOutline() {
     clearTimeout(outlineTimer);
@@ -420,7 +467,7 @@
   function renderOutline() {
     if (!ready) return;
     const rail = $('outline');
-    const items = headingsOf(editor.getValue());
+    const items = [...(editorRoot()?.querySelectorAll('h1,h2,h3,h4,h5,h6') || [])];
     rail.replaceChildren();
     if (!items.length) {
       const empty = document.createElement('p');
@@ -429,14 +476,14 @@
       rail.append(empty);
       return;
     }
-    for (const [index, item] of items.entries()) {
+    items.forEach((heading, index) => {
       const link = document.createElement('a');
       link.href = '#';
-      link.className = 'outline-item level-' + item.level;
-      link.textContent = item.text;
+      link.className = 'outline-item level-' + heading.tagName[1];
+      link.textContent = headingText(heading);
       link.onclick = event => { event.preventDefault(); jumpToHeading(index); };
       rail.append(link);
-    }
+    });
   }
   function jumpToHeading(index) {
     const heading = editorRoot()?.querySelectorAll('h1,h2,h3,h4,h5,h6')[index];
@@ -1238,8 +1285,11 @@
     // In regular Markdown text, leave backticks alone so Vditor can turn ```
     // into a fenced block. Inside an existing code block, pair a single tick.
     const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"};
-    let scrollBeforeMarkdownTransform = null;
+    let composing = false;
+    mount.addEventListener('compositionstart', () => { composing = true; });
+    mount.addEventListener('compositionend', () => { composing = false; });
     mount.addEventListener('keydown', event => {
+      if (event.defaultPrevented || event.isComposing || composing || busy) return;
       if (handleListTab(event)) return;
       const root = editorRoot();
       const selection = getSelection();
@@ -1250,17 +1300,11 @@
       const range = selection.getRangeAt(0);
       const inCodeBlock = !!element.closest('.vditor-ir__node[data-type="code-block"]');
       const activePairs = inCodeBlock ? {...pairs, '`': '`'} : pairs;
-      const inMathBlock = !!element.closest('.vditor-ir__node[data-type="math-block"]');
-      if ((!event.ctrlKey && !event.metaKey && !event.altKey &&
-           (['`', '$', '~', '*', '_'].includes(event.key) ||
-            (event.key === 'Enter' && (inCodeBlock || inMathBlock))))) {
-        scrollBeforeMarkdownTransform = {x: window.scrollX, y: window.scrollY};
-      }
       const next = node?.nodeType === Node.TEXT_NODE
         ? node.data[selection.anchorOffset]
         : node?.childNodes?.[selection.anchorOffset]?.textContent?.[0];
 
-      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey &&
+      if (range.collapsed && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey &&
           Object.values(activePairs).includes(event.key) && next === event.key) {
         const caret = document.createRange();
         if (node?.nodeType === Node.TEXT_NODE) caret.setStart(node, selection.anchorOffset + 1);
@@ -1269,35 +1313,37 @@
         event.preventDefault(); event.stopImmediatePropagation(); return;
       }
 
-      if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey && range.collapsed) {
-        const codeBlock = element.closest('.vditor-ir__node[data-type="code-block"]');
-        const code = codeBlock?.querySelector('.vditor-ir__marker--pre code');
-        if (code?.contains(range.startContainer)) {
-          const beforeCaret = range.cloneRange();
-          beforeCaret.selectNodeContents(code);
-          beforeCaret.setEnd(range.startContainer, range.startOffset);
-          const currentLine = beforeCaret.toString().split('\n').pop() || '';
-          const indent = currentLine.match(/^[\t ]*/)?.[0] || '';
-          if (indent) setTimeout(() => {
-            const liveSelection = getSelection();
-            if (!liveSelection?.rangeCount || !liveSelection.isCollapsed) return;
-            const liveRange = liveSelection.getRangeAt(0);
-            const liveNode = liveRange.startContainer;
-            const liveElement = liveNode.nodeType === Node.TEXT_NODE ? liveNode.parentElement : liveNode;
-            const liveCode = liveElement?.closest?.('.vditor-ir__node[data-type="code-block"]')
-              ?.querySelector('.vditor-ir__marker--pre code');
-            if (!liveCode?.contains(liveNode)) return;
-            const indentNode = document.createTextNode(indent);
-            liveRange.insertNode(indentNode);
-            liveRange.setStartAfter(indentNode);
-            liveRange.collapse(true);
-            liveSelection.removeAllRanges();
-            liveSelection.addRange(liveRange);
-            editorRoot()?.dispatchEvent(new InputEvent('input', {
-              bubbles: true, inputType: 'insertText', data: indent,
-            }));
-            changed();
-          }, 0);
+      const code = element.closest('[data-type="code-block"] .vditor-ir__marker--pre code');
+      if (code && root.contains(code) && !event.altKey) {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          const block = code.closest('[data-type="code-block"]');
+          const paragraph = document.createElement('p');
+          paragraph.dataset.block = '0';
+          paragraph.textContent = '\u200b';
+          block.insertAdjacentElement(event.shiftKey ? 'beforebegin' : 'afterend', paragraph);
+          const next = document.createRange(); next.selectNodeContents(paragraph); next.collapse(true);
+          selection.removeAllRanges(); selection.addRange(next);
+          root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertParagraph'}));
+          event.preventDefault(); event.stopImmediatePropagation(); changed(); return;
+        }
+        if (!event.ctrlKey && !event.metaKey && ['Enter', 'Tab'].includes(event.key) && code.contains(range.endContainer)) {
+          const before = range.cloneRange(); before.selectNodeContents(code); before.setEnd(range.startContainer, range.startOffset);
+          const end = range.cloneRange(); end.selectNodeContents(code); end.setEnd(range.endContainer, range.endOffset);
+          const result = StudioEditing.editCode(code.textContent, before.toString().length, end.toString().length, event.key, event.shiftKey);
+          // Keep Vditor's terminal newline, so the last blank line has a caret box.
+          code.textContent = result.text.endsWith('\n') ? result.text : result.text + '\n';
+          const text = code.firstChild;
+          const next = document.createRange(); next.setStart(text, result.start); next.setEnd(text, result.end);
+          selection.removeAllRanges(); selection.addRange(next);
+          root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: event.key === 'Enter' ? 'insertParagraph' : 'insertText'}));
+          event.preventDefault(); event.stopImmediatePropagation(); changed();
+          requestAnimationFrame(() => {
+            const live = getSelection();
+            if (!live?.rangeCount || !root.contains(live.anchorNode)) return;
+            const rect = live.getRangeAt(0).getBoundingClientRect();
+            if (rect.height && rect.bottom > innerHeight - 72) window.scrollBy(0, rect.bottom - innerHeight + 90);
+          });
+          return;
         }
       }
 
@@ -1345,66 +1391,39 @@
         event.preventDefault(); event.stopImmediatePropagation(); changed();
       }
     }, true);
-    mount.addEventListener('keyup', event => {
-      if (!scrollBeforeMarkdownTransform) return;
-      const saved = scrollBeforeMarkdownTransform;
-      scrollBeforeMarkdownTransform = null;
-      requestAnimationFrame(() => {
-        if (Math.abs(window.scrollX - saved.x) > 1 || Math.abs(window.scrollY - saved.y) > 1) {
-          window.scrollTo(saved.x, saved.y);
-        }
-      });
-    });
     function handleListTab(event) {
-      if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return false;
-      const selection = getSelection();
-      if (!selection?.rangeCount) return false;
-      const anchorNode = selection.anchorNode;
-      const anchorElement = anchorNode?.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode;
-      const li = anchorElement?.closest?.('li');
-      const root = editorRoot();
-      if (!li || !root?.contains(li) || li.closest('td, th, pre:not(.vditor-reset)')) return false;
-
-      const clean = value => String(value || '').replace(/\u200b/g, '').replace(/\s+/g, ' ').trim();
-      const visibleText = clean(li.innerText || li.textContent);
-      const lines = editor.getValue().split('\n');
-      const candidates = [];
-      lines.forEach((line, lineIndex) => {
-        const match = line.match(/^(\s*)([-+*]|\d+[.)])\s+(?:\[[ xX]\]\s*)?(.*)$/);
-        if (!match) return;
-        const text = clean(match[3].replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`~]/g, ''));
-        if (text === visibleText || (text && visibleText && (text.includes(visibleText) || visibleText.includes(text)))) {
-          candidates.push({lineIndex, indent: match[1].length});
-        }
-      });
-      if (!candidates.length) return false;
-      const allItems = [...root.querySelectorAll('li')];
-      const matchingBefore = allItems.slice(0, allItems.indexOf(li)).filter(item => clean(item.innerText || item.textContent) === visibleText).length;
-      const target = candidates[Math.min(matchingBefore, candidates.length - 1)];
-      const delta = event.shiftKey ? -2 : 2;
-      if (event.shiftKey && target.indent < 2) { event.preventDefault(); return true; }
-      const nextLines = lines.slice();
-      for (let lineIndex = target.lineIndex; lineIndex < nextLines.length; lineIndex++) {
-        const current = nextLines[lineIndex];
-        if (lineIndex !== target.lineIndex && current.trim()) {
-          const indent = current.match(/^\s*/)[0].length;
-          if (indent <= target.indent) break;
-        }
-        if (!current.trim()) continue;
-        if (lineIndex === target.lineIndex) nextLines[lineIndex] = ' '.repeat(Math.max(0, target.indent + delta)) + current.trimStart();
-        else if (current.match(/^\s*([-+*]|\d+[.)])\s/)) nextLines[lineIndex] = ' '.repeat(Math.max(0, current.match(/^\s*/)[0].length + delta)) + current.trimStart();
+      if (event.defaultPrevented || event.isComposing || composing || busy || event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return false;
+      const selection = getSelection(), root = editorRoot();
+      if (!selection?.rangeCount || !root) return false;
+      const range = selection.getRangeAt(0);
+      const element = node => node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      const first = element(range.startContainer)?.closest('li');
+      const last = element(range.endContainer)?.closest('li');
+      if (!first || !last || !root.contains(first) || first.parentElement !== last.parentElement || first.closest('td,th,pre:not(.vditor-reset)')) return false;
+      const list = first.parentElement, items = [];
+      for (let item = first; item; item = item.nextElementSibling) { items.push(item); if (item === last) break; }
+      const startNode = range.startContainer, startOffset = range.startOffset;
+      const endNode = range.endContainer, endOffset = range.endOffset;
+      if (event.shiftKey) {
+        const parent = list.parentElement.closest('li');
+        if (!parent || !root.contains(parent)) { event.preventDefault(); event.stopImmediatePropagation(); return true; }
+        const trailing = list.cloneNode(false);
+        while (last.nextElementSibling) trailing.append(last.nextElementSibling);
+        if (trailing.children.length) last.append(trailing);
+        let after = parent;
+        for (const item of items) { after.after(item); after = item; }
+        if (!list.children.length) list.remove();
+      } else {
+        const previous = first.previousElementSibling;
+        if (!previous) { event.preventDefault(); event.stopImmediatePropagation(); return true; }
+        let nested = previous.lastElementChild;
+        if (!nested || nested.tagName !== list.tagName) { nested = list.cloneNode(false); nested.removeAttribute('start'); previous.append(nested); }
+        for (const item of items) nested.append(item);
       }
-      event.preventDefault(); event.stopImmediatePropagation();
-      editor.setValue(nextLines.join('\n'));
-      changed();
-      setTimeout(() => {
-        const live = editorRoot();
-        const match = [...(live?.querySelectorAll('li') || [])].find(item => clean(item.innerText || item.textContent) === visibleText);
-        if (!match) return;
-        live.focus();
-        const caret = document.createRange(); caret.selectNodeContents(match); caret.collapse(true);
-        const currentSelection = getSelection(); currentSelection.removeAllRanges(); currentSelection.addRange(caret);
-      }, 100);
+      range.setStart(startNode, startOffset); range.setEnd(endNode, endOffset);
+      selection.removeAllRanges(); selection.addRange(range);
+      root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: event.shiftKey ? 'formatOutdent' : 'formatIndent'}));
+      event.preventDefault(); event.stopImmediatePropagation(); changed();
       return true;
     }
     return {handleListTab};
@@ -1436,6 +1455,8 @@
       ['Ctrl / ⌘ + Z / ⇧Z', '撤销 / 重做'],
       ['N', '新文章（不在输入框内时）'],
       ['Tab', '表格单元格之间移动；列表里缩进'],
+      ['Tab / Shift+Tab', '代码块中缩进 / 取消缩进，可选中多行'],
+      ['Ctrl / ⌘ + Enter', '在代码块后继续正文；加 Shift 在前面插入'],
       ['Esc', '关闭菜单、对话框或退出专注'],
       ['?', '打开这张快捷键表'],
     ];
@@ -1513,6 +1534,7 @@
     $('theme-toggle').textContent = theme === 'dark' ? '☾' : theme === 'light' ? '☀' : '◐';
   }
   function applyPrefs() {
+    document.body.classList.toggle('outline-hidden', !prefs.outline);
     document.body.classList.toggle('wide', !!prefs.wide);
     $('toggle-wide').setAttribute('aria-pressed', String(!!prefs.wide));
     $('toggle-typer').setAttribute('aria-pressed', String(!!prefs.typer));
@@ -1552,37 +1574,51 @@
     return length;
   }
 
-  // Offsets in the Markdown value for the range the format bar was shown for.
+  // Serialize a detached copy with boundary tokens. Searching for the selected
+  // words would format the wrong occurrence when the same text appears twice.
   function rangeOffsets(range) {
-    // The range's own text is the authority; the DOM may have been re-rendered
-    // since, so containers are never compared against the editor element.
-    if (!range) return null;
-    const selected = String(range.toString());
-    if (!selected.trim() || selected.length > 20000) return null;
-    const value = editor ? editor.getValue() : '';
-    const found = value.indexOf(selected);
-    return found < 0 ? null : {start: found, end: found + selected.length};
+    const root = editorRoot();
+    if (!range || !root?.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+    if (!range.toString().trim() || range.toString().length > 20000) return null;
+    const copy = root.cloneNode(true);
+    const locate = node => {
+      const path = [];
+      while (node !== root) { path.unshift([...node.parentNode.childNodes].indexOf(node)); node = node.parentNode; }
+      return path.reduce((parent, index) => parent.childNodes[index], copy);
+    };
+    const cloned = document.createRange();
+    cloned.setStart(locate(range.startContainer), range.startOffset);
+    cloned.setEnd(locate(range.endContainer), range.endOffset);
+    const token = 'STUDIO' + crypto.randomUUID().replaceAll('-', '');
+    const startToken = token + 'START', endToken = token + 'END';
+    const tail = cloned.cloneRange(); tail.collapse(false); tail.insertNode(document.createTextNode(endToken));
+    const head = cloned.cloneRange(); head.collapse(true); head.insertNode(document.createTextNode(startToken));
+    const tagged = editor.vditor.lute.VditorIRDOM2Md(copy.innerHTML);
+    const start = tagged.indexOf(startToken), end = tagged.indexOf(endToken);
+    if (start < 0 || end < start) return null;
+    const value = tagged.replace(startToken, '').replace(endToken, '');
+    if (value !== editor.getValue()) return null;
+    return {start, end: end - startToken.length, value};
   }
 
-  // Puts the caret back at a text offset after Vditor re-rendered the document.
+  // Resolve a Markdown position through the renderer, rather than counting
+  // hidden syntax markers and duplicate highlighted text in the live DOM.
   function setCaret(start) {
+    const value = editor.getValue();
+    const token = 'STUDIOCARET' + crypto.randomUUID().replaceAll('-', '');
+    editor.setValue(value.slice(0, start) + token + value.slice(start));
     const root = editorRoot();
-    if (!root) return;
-    root.focus();
-    let remaining = start;
-    let target = null;
-    let offset = 0;
+    let target = null, offset = 0;
     for (const node of walkTextNodes(root)) {
-      if (remaining <= node.data.length) { target = node; offset = remaining; break; }
-      remaining -= node.data.length;
+      const at = node.data.indexOf(token);
+      if (at < 0) continue;
+      if (!target && !node.parentElement.closest('.vditor-ir__preview,.vditor-copy')) { target = node; offset = at; }
+      node.data = node.data.replaceAll(token, '');
     }
     if (!target) return;
-    const range = document.createRange();
-    range.setStart(target, Math.min(offset, target.data.length));
-    range.collapse(true);
-    const selection = getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
+    root.focus({preventScroll: true});
+    const range = document.createRange(); range.setStart(target, offset); range.collapse(true);
+    const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
   }
 
   function applyFormat(action) {
@@ -1598,6 +1634,7 @@
       return;
     }
     const value = editor.getValue();
+    if (value !== offsets.value) { toast('正文已变化，请重新选择文字。'); return; }
     let {start, end} = offsets;
     while (start < end && /\s/.test(value[start])) start += 1;
     while (end > start && /\s/.test(value[end - 1])) end -= 1;

@@ -24,11 +24,32 @@
 .table-row-handle:hover,.table-row-handle:focus-visible{background:var(--accent);opacity:.68;outline:0}
 .vditor-reset td:focus-within,.vditor-reset th:focus-within{box-shadow:inset 0 0 0 1.5px var(--accent-line)}
 .vditor-reset .studio-table-selected{background:color-mix(in srgb,var(--accent) 13%,var(--paper))!important;box-shadow:inset 0 0 0 1px var(--accent-line)}
+/* Lute represents a saved cell break as an inline HTML marker. Give it its
+   line-break appearance without changing the Markdown or inserting content. */
+.vditor-ir td .studio-cell-break,.vditor-ir th .studio-cell-break{display:block!important;height:0;line-height:0}
+.vditor-ir .studio-cell-break>.vditor-ir__marker{display:none!important}
 .vditor-reset ol ol{list-style-type:lower-alpha}
 .vditor-reset ol ol ol{list-style-type:lower-roman}
 .vditor-ir .vditor-ir__preview .vditor-copy{display:block;opacity:.5;transition:opacity .14s}
 .vditor-ir .vditor-ir__preview:hover .vditor-copy,.vditor-ir .vditor-copy:focus-within{opacity:1}
 .vditor-ir .vditor-ir__preview .vditor-copy span{display:grid;place-items:center;width:30px;height:28px;border:1px solid var(--line);border-radius:7px;background:var(--paper);box-shadow:var(--shadow-2)}
+/* Both layers must have identical glyph and line geometry, including long lines.
+   A fixed size avoids Vditor's more-specific 85% rule on unhighlighted code. */
+.vditor-ir [data-type="code-block"]>.vditor-ir__marker--pre,
+.vditor-ir [data-type="code-block"]>.vditor-ir__preview{padding:0!important;margin:0 0 1.1em;min-width:0;overflow:visible;transition:none}
+.vditor-ir [data-type="code-block"]>.vditor-ir__marker--pre>code,
+.vditor-ir [data-type="code-block"]>.vditor-ir__preview>code{
+ font-family:var(--mono)!important;font-size:14px!important;line-height:24px!important;
+ font-weight:400;font-style:normal;font-variant-ligatures:none;letter-spacing:0;tab-size:4;
+ padding:14px 16px!important;border:1px solid var(--line-2);box-sizing:border-box;
+ white-space:pre-wrap!important;overflow-wrap:anywhere;word-break:normal!important;
+ overflow:visible!important;max-height:none!important;min-height:54px;
+}
+.vditor-ir [data-type="code-block"]>.vditor-ir__preview>code *{font:inherit;letter-spacing:inherit}
+.vditor-ir [data-type="code-block"]>.vditor-ir__marker--pre>code::selection{color:var(--ink)!important;-webkit-text-fill-color:var(--ink)!important;background:var(--hl)}
+.vditor-ir .vditor-ir__node:not(.vditor-ir__node--expand)[data-type="code-block"]>.vditor-ir__marker{display:none!important}
+.vditor-ir [data-type="code-block"]::before,.vditor-ir [data-type="code-block"]::after{content:none!important}
+.vditor-ir .vditor-ir__node--expand[data-type="code-block"]>.vditor-ir__marker--info{font-family:var(--mono);font-size:12px;line-height:1.8;min-height:24px;padding:0 10px;color:var(--muted)}
 /* In a focused code block, stack Vditor's editable text and live highlighted
    preview in the same grid cell. The transparent editor layer keeps the real
    caret and selection while the reader sees one continuously rendered block. */

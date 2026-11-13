@@ -5,6 +5,18 @@ const vm=require('node:vm');
 const context={window:{}};vm.runInNewContext(fs.readFileSync('source/studio/table-tools.js','utf8'),context);
 const tables=context.window.StudioTableTools.tables;
 const layout=require('../scripts/table-layout');
+test('resizing and structural edits retain rich inline content and cell line breaks',()=>{
+ const api=context.window.StudioTableTools;
+ const source='| A | B |\n| --- | --- |\n| first<br>second | **bold** and `code` |';
+ const original=tables(source)[0];
+ const saved=api.serialize(original.rows,original.align,[200,200],[56,80]);
+ const restored=tables(saved)[0];
+ assert.equal(restored.rows[1][0],'first<br>second');
+ assert.equal(restored.rows[1][1],'**bold** and `code`');
+ const html=layout(require('markdown-it')({html:true}).render(saved));
+ assert.match(html,/first<br>second/);
+ assert.match(html,/<strong>bold<\/strong>/);
+});
 test('real Markdown rendering carries dimensions into published HTML',()=>{
  const md=require('markdown-it')({html:true});
  const source='<!-- studio-table-layout {"widths":[250,180],"heights":[64,104]} -->\n\n| A | B |\n| --- | --- |\n| content | more |\n';
