@@ -38,7 +38,7 @@
   const rule=value=>(value.startsWith(':')?':':'')+'---'+(value.endsWith(':')?':':'');
   return'<!-- studio-table-layout '+JSON.stringify({widths,heights})+' -->\n'+[line(rows[0]),line(align.map(rule)),...rows.slice(1).map(line)].join('\n');
  }
- window.StudioTableTools={normalizeSeparators,tables,serialize,mount({root,getValue,setValue,onChange,isBusy}){
+ window.StudioTableTools={normalizeSeparators,tables,serialize,mount({root,getValue,setValue,onChange,isBusy,onImage}){
   const toolbar=document.createElement('div');toolbar.className='table-context-tools';toolbar.setAttribute('role','toolbar');toolbar.setAttribute('aria-label','当前单元格的表格操作');toolbar.hidden=true;
   const handles=document.createElement('div');handles.className='table-column-handles';handles.setAttribute('role','group');handles.setAttribute('aria-label','表格行列选择与尺寸调整');
   document.body.append(toolbar,handles);
@@ -186,7 +186,8 @@
   const deleteRow=makeButton('删行','删除当前行（表头行会保留）',()=>writeTable(current.index,data=>{if(current.row>0){data.rows.splice(current.row,1);data.heights.splice(current.row,1);current.row--; }},{get row(){return current.row;},get col(){return current.col;}}));
   const deleteCol=makeButton('删列','删除当前列',()=>writeTable(current.index,data=>{if(data.align.length>1){data.align.splice(current.col,1);data.widths.splice(current.col,1);data.rows.forEach(row=>row.splice(current.col,1));current.col=Math.max(0,current.col-1);}},{get row(){return current.row;},get col(){return current.col;}}));
   const position=document.createElement('span');position.className='table-context-position';position.setAttribute('aria-live','polite');
-  toolbar.append(copyRange,copyRow,copyColumn,addRow,addCol,deleteRow,deleteCol,position);
+  const image=makeButton('插入图片','在当前单元格插入图片',()=>onImage?.());
+  toolbar.append(image,copyRange,copyRow,copyColumn,addRow,addCol,deleteRow,deleteCol,position);
 
   function applyWidths(table,widths){
    table.style.tableLayout='fixed';table.style.width=(widths.reduce((a,b)=>a+b,0)+2)+'px';table.style.maxWidth='none';
@@ -345,6 +346,7 @@
    focusCell(hit.table,Math.floor(index/colCount),index%colCount);
   },true);
   root.addEventListener('paste',event=>{
+   if(event.clipboardData?.files?.length)return;
    const hit=cellAt(event.target)||selectionCell(),text=event.clipboardData?.getData('text/plain')||'';
    if(!hit||!/[\t\n]/.test(text))return;
    event.preventDefault();

@@ -985,7 +985,37 @@
     const extension = type === 'image/png' ? '.png' : '.webp';
     return new File([blob], (file.name || 'image').replace(/\.\w+$/, '') + extension, {type});
   }
-  async function insertImage(file, draft = active) {
+  function imageTarget() {
+    const root = editorRoot(), selection = getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    return {draft: active, range: range && root?.contains(range.commonAncestorContainer) ? range.cloneRange() : null};
+  }
+  function insertImageAt(markdown, target) {
+    const root = editorRoot(), saved = target?.range;
+    if (saved && root.contains(saved.commonAncestorContainer)) {
+      root.focus({preventScroll: true});
+      // Render only the image fragment; inserting surrounding paragraphs would
+      // split a table cell. Keep the Range captured before the file picker.
+      const fragment = document.createElement('div');
+      fragment.innerHTML = editor.vditor.lute.Md2VditorIRDOM(markdown);
+      const content = document.createDocumentFragment();
+      const paragraph = fragment.firstElementChild;
+      if (!paragraph) return;
+      while (paragraph.firstChild) content.append(paragraph.firstChild);
+      const tail = document.createTextNode('\u200b'); content.append(tail);
+      saved.deleteContents(); saved.insertNode(content);
+      saved.setStart(tail, 1); saved.collapse(true);
+      const selection = getSelection(); selection.removeAllRanges(); selection.addRange(saved);
+      root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertFromPaste'}));
+      target.range = selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    } else {
+      // If the original DOM has been replaced, never insert at an unrelated
+      // current caret (e.g. a different document after an asynchronous upload).
+      const range = document.createRange(); range.selectNodeContents(root); range.collapse(false);
+      target.range = range; insertImageAt(markdown, target);
+    }
+  }
+  async function insertImage(file, draft = active, target = imageTarget()) {
     if (!ready || busy) return false;
     const bodyAtStart = draft === active ? editor.getValue() : draft.body;
     const limit = cloudHost ? Math.floor((CLOUD_BODY_LIMIT - new TextEncoder().encode(bodyAtStart).length - 512) * 0.75) : 2 * 1024 * 1024;
@@ -1008,7 +1038,7 @@
         throw Error('图片超过剩余云端容量，请先压缩或使用图片链接。');
       }
       if (isCurrent) {
-        editor.insertValue('\n' + markdown + '\n');
+        insertImageAt(markdown, target);
         changed();
       } else {
         draft.body = body.trimEnd() + '\n\n' + markdown + '\n';
@@ -1018,8 +1048,8 @@
         if (me) cloudSave(draft).catch(() => {});
       }
       const ratio = Math.round(prepared.size / Math.max(1, file.size) * 100);
-      const target = isCurrent ? '' : '到《' + (draft.title || '无标题文章') + '》末尾';
-      toast('图片已插入' + target + '（' + Math.round(prepared.size / 1024) + 'KB' + (ratio < 100 ? '，已压缩到 ' + ratio + '%' : '') + '）。');
+      const destination = isCurrent ? '' : '到《' + (draft.title || '无标题文章') + '》末尾';
+      toast('图片已插入' + destination + '（' + Math.round(prepared.size / 1024) + 'KB' + (ratio < 100 ? '，已压缩到 ' + ratio + '%' : '') + '）。');
       return true;
     } catch (error) {
       toast(error.message);
@@ -1031,12 +1061,16 @@
     const files = [...(event.dataTransfer?.files || [])];
     if (!files.length) return;
     event.preventDefault();
+    event.stopPropagation();
     $('drop-hint').hidden = true;
     document.body.classList.remove('dropping');
     if (!ready || busy) return;
     const draft = active;
+    const point = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+    const target = imageTarget();
+    if (point && editorRoot()?.contains(point.commonAncestorContainer)) target.range = point;
     for (const file of files) {
-      if (IMAGE_TYPES.test(file.type)) await insertImage(file, draft);
+      if (IMAGE_TYPES.test(file.type)) await insertImage(file, draft, target);
       else if (/\.(md|markdown|txt)$/i.test(file.name)) {
         try { importMarkdown(await file.text(), file.name); }
         catch { toast('无法读取文件，请重新选择。'); }
@@ -1271,12 +1305,13 @@
   }
 
   function pickImage() {
+    const target = imageTarget(), draft = active;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/png,image/jpeg,image/webp,image/gif';
     input.multiple = true;
     input.onchange = async () => {
-      for (const file of input.files || []) await insertImage(file);
+      for (const file of input.files || []) await insertImage(file, draft, target);
     };
     input.click();
   }
@@ -1285,7 +1320,22 @@
     // In regular Markdown text, leave backticks alone so Vditor can turn ```
     // into a fenced block. Inside an existing code block, pair a single tick.
     const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"};
-    let composing = false;
+    mount.addEventListener('click', event => {
+      const image = event.target.closest?.('[data-type="img"]:has(img[src^="data:"])');
+      if (!image) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      editorRoot()?.focus({preventScroll: true});
+      const range = document.createRange(); range.selectNode(image);
+      const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    }, true);
+    let composing = false, codeEnter = false;
+    // Vditor's keyup scrollCenter treats an empty code line as the block top.
+    // Our code Enter already reveals the caret; don't run that second scroll.
+    mount.addEventListener('keyup', event => {
+      if (event.key === 'Enter' && codeEnter) {
+        codeEnter = false; event.stopImmediatePropagation();
+      }
+    }, true);
     mount.addEventListener('compositionstart', () => { composing = true; });
     mount.addEventListener('compositionend', () => { composing = false; });
     mount.addEventListener('keydown', event => {
@@ -1298,6 +1348,18 @@
       const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
       if (!element?.closest) return;
       const range = selection.getRangeAt(0);
+      // Leave native Shift+arrow selection intact, bypassing Vditor's table
+      // navigation (which otherwise collapses the selection to another cell).
+      if (event.shiftKey && event.key.startsWith('Arrow') && !event.altKey) {
+        event.stopImmediatePropagation(); return;
+      }
+      const command = (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey
+        ? ({k: 'delete', d: 'duplicate'})[event.key.toLowerCase()]
+        : event.ctrlKey && event.altKey && !event.shiftKey
+          ? ({ArrowUp: 'up', ArrowDown: 'down'})[event.key] : null;
+      if (command && editCurrentLines(root, selection, range, command)) {
+        event.preventDefault(); event.stopImmediatePropagation(); changed(); return;
+      }
       const inCodeBlock = !!element.closest('.vditor-ir__node[data-type="code-block"]');
       const activePairs = inCodeBlock ? {...pairs, '`': '`'} : pairs;
       const next = node?.nodeType === Node.TEXT_NODE
@@ -1327,6 +1389,7 @@
           event.preventDefault(); event.stopImmediatePropagation(); changed(); return;
         }
         if (!event.ctrlKey && !event.metaKey && ['Enter', 'Tab'].includes(event.key) && code.contains(range.endContainer)) {
+          if (event.key === 'Enter') codeEnter = true;
           const before = range.cloneRange(); before.selectNodeContents(code); before.setEnd(range.startContainer, range.startOffset);
           const end = range.cloneRange(); end.selectNodeContents(code); end.setEnd(range.endContainer, range.endOffset);
           const result = StudioEditing.editCode(code.textContent, before.toString().length, end.toString().length, event.key, event.shiftKey);
@@ -1340,7 +1403,12 @@
           requestAnimationFrame(() => {
             const live = getSelection();
             if (!live?.rangeCount || !root.contains(live.anchorNode)) return;
-            const rect = live.getRangeAt(0).getBoundingClientRect();
+            let rect = live.getRangeAt(0).getBoundingClientRect();
+            // Collapsed ranges immediately after a newline can have a zero box.
+            if (!rect.height && live.anchorNode?.nodeType === Node.TEXT_NODE) {
+              const probe = live.getRangeAt(0).cloneRange(), at = live.anchorOffset;
+              if (at > 0) { probe.setStart(live.anchorNode, at - 1); rect = probe.getBoundingClientRect(); }
+            }
             if (rect.height && rect.bottom > innerHeight - 72) window.scrollBy(0, rect.bottom - innerHeight + 90);
           });
           return;
@@ -1429,6 +1497,57 @@
     return {handleListTab};
   }
 
+  function editCurrentLines(root, selection, range, action) {
+    const el = node => node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+    const code = el(range.startContainer).closest('.vditor-ir__marker--pre code');
+    if (code) {
+      if (!code.contains(range.endContainer)) return false;
+      const offset = (node, at) => { const r = document.createRange(); r.selectNodeContents(code); r.setEnd(node, at); return r.toString().length; };
+      const result = StudioEditing.editLines(code.textContent, offset(range.startContainer, range.startOffset), offset(range.endContainer, range.endOffset), action);
+      code.textContent = result.text || '\n';
+      range.setStart(code.firstChild, result.start); range.setEnd(code.firstChild, result.end);
+    } else {
+      const selector = 'tr,li,p,h1,h2,h3,h4,h5,h6';
+      const block = node => el(node).closest('td,th')?.parentElement || el(node).closest('li') || el(node).closest(selector);
+      const first = block(range.startContainer), last = block(range.endContainer);
+      if (!first || !last || !root.contains(first) || first.parentElement !== last.parentElement) return false;
+      const items = [];
+      for (let item = first; item; item = item.nextElementSibling) { items.push(item); if (item === last) break; }
+      if (!items.includes(last)) return false;
+      // Preserve the header's schema; table row shortcuts act on body rows.
+      if (items.some(item => item.tagName === 'TR' && item.querySelector('th'))) return true;
+      if (action === 'duplicate') {
+        let after = last;
+        for (const item of items) { const copy = item.cloneNode(true); after.after(copy); after = copy; }
+        range.selectNodeContents(after.querySelector('td') || after); range.collapse(false);
+      } else if (action === 'delete') {
+        let target = last.nextElementSibling || first.previousElementSibling;
+        if (!target) {
+          if (first.tagName === 'TR') {
+            for (const cell of first.cells) cell.innerHTML = '<br>';
+            for (const item of items.slice(1)) item.remove();
+            target = first;
+          } else {
+            target = document.createElement(first.tagName === 'LI' ? 'li' : 'p'); target.dataset.block = '0'; target.innerHTML = '<br>'; first.before(target);
+            items.forEach(item => item.remove());
+          }
+        } else items.forEach(item => item.remove());
+        range.selectNodeContents(target.querySelector('td') || target); range.collapse(true);
+      } else {
+        const neighbor = action === 'up' ? first.previousElementSibling : last.nextElementSibling;
+        if (!neighbor || ((first.tagName === 'TR' || first.tagName === 'LI') && neighbor.tagName !== first.tagName)) return true;
+        // DOM moves preserve inline formatting, images and the selection nodes.
+        const startNode = range.startContainer, startOffset = range.startOffset, endNode = range.endContainer, endOffset = range.endOffset;
+        if (action === 'up') items.forEach(item => neighbor.before(item));
+        else { let after = neighbor; items.forEach(item => { after.after(item); after = item; }); }
+        range.setStart(startNode, startOffset); range.setEnd(endNode, endOffset);
+      }
+    }
+    selection.removeAllRanges(); selection.addRange(range);
+    root.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText'}));
+    return true;
+  }
+
   // -------------------------------------------------------------------- dialogs
   function dialog(title, content) {
     const box = document.createElement('dialog');
@@ -1456,6 +1575,10 @@
       ['N', '新文章（不在输入框内时）'],
       ['Tab', '表格单元格之间移动；列表里缩进'],
       ['Tab / Shift+Tab', '代码块中缩进 / 取消缩进，可选中多行'],
+      ['Shift + 方向键', '扩展文字选区（包括代码和表格）'],
+      ['Ctrl / ⌘ + Shift + K', '删除当前代码行、正文段落或表格行'],
+      ['Ctrl / ⌘ + Shift + D', '复制当前行到下一行，保留格式'],
+      ['Ctrl + Alt + ↑ / ↓', '上移 / 下移当前行（表头保持固定）'],
       ['Ctrl / ⌘ + Enter', '在代码块后继续正文；加 Shift 在前面插入'],
       ['Esc', '关闭菜单、对话框或退出专注'],
       ['?', '打开这张快捷键表'],
@@ -1934,7 +2057,7 @@
       $('drop-hint').hidden = true;
       document.body.classList.remove('dropping');
     });
-    document.addEventListener('drop', handleDrop);
+    document.addEventListener('drop', handleDrop, true);
   }
 
   let slash = null, editorAssist = null;
@@ -1959,8 +2082,8 @@
         upload: {
           accept: 'image/png,image/jpeg,image/webp,image/gif',
           handler: async files => {
-            const draft = active;
-            for (const file of files) await insertImage(file, draft);
+            const draft = active, target = imageTarget();
+            for (const file of files) await insertImage(file, draft, target);
             return null;
           },
         },
@@ -1995,7 +2118,7 @@
       toast('编辑器加载失败：' + error.message, 8000);
       return;
     }
-    StudioTableTools.mount({root: $('editor'), getValue: () => editor.getValue(), setValue: value => editor.setValue(value), onChange: changed, isBusy: () => !ready || busy});
+    StudioTableTools.mount({root: $('editor'), getValue: () => editor.getValue(), setValue: value => editor.setValue(value), onChange: changed, isBusy: () => !ready || busy, onImage: pickImage});
     bubble = StudioBubble.mount({
       // Runs while the selection is still live, before Vditor can re-render.
       // The bar reports the range it was shown for, while it is still live.
