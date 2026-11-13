@@ -305,7 +305,7 @@
     renderChips('tags', active.tags || []);
     $('published').checked = active.published !== false;
     updateDocumentActions();
-    $('crumb-title').textContent = active.title || '无标题文章';
+    $('crumb-title').textContent = $('document-tab-title').textContent = active.title || '无标题文章';
     document.title = (active.title || '写作室') + ' · 写作室';
     showExtras();
     fillParents();
@@ -352,7 +352,7 @@
     active.title = title;
     active.date = date;
     active.published = published;
-    $('crumb-title').textContent = active.title || '无标题文章';
+    $('crumb-title').textContent = $('document-tab-title').textContent = active.title || '无标题文章';
     document.title = (active.title || '写作室') + ' · 写作室';
     return true;
   }

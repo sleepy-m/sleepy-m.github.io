@@ -11,6 +11,7 @@ layout: false
 <link rel="stylesheet" href="/studio/workspace.css">
 <link rel="stylesheet" href="/studio/table-tools.css">
 <link rel="stylesheet" href="/studio/document-tree.css">
+<link rel="stylesheet" href="/studio/modern.css">
 </head>
 <body data-theme="paper">
 <header class="app-header">
@@ -20,7 +21,7 @@ layout: false
   <span class="brand-name">写作室</span>
   <small id="account" class="account">本机草稿</small>
  </div>
- <div class="crumb" id="crumb" aria-hidden="true"><span id="crumb-title">未命名</span></div>
+ <div class="crumb" id="crumb"><span class="crumb-root">我的文档</span><span class="crumb-separator" aria-hidden="true">/</span><span id="crumb-title">未命名</span></div>
  <div class="header-actions">
   <div class="save-chip" id="save-chip" data-state="saved" role="status" aria-live="polite" title="草稿自动保存在本机；Ctrl / ⌘ + S 立即保存"><span class="save-dot" aria-hidden="true"></span><span id="save-text">正在载入</span></div>
   <span class="actions-divider" aria-hidden="true"></span>
@@ -71,6 +72,7 @@ layout: false
   </div>
  </aside>
  <main class="canvas">
+  <div class="document-tab" aria-label="当前文档"><span class="document-symbol" aria-hidden="true">▤</span><span id="document-tab-title">未命名</span><span class="document-format">Markdown</span></div>
   <article class="paper" id="paper">
    <input id="title" aria-label="文章标题" placeholder="无标题文章" autocomplete="off" spellcheck="false">
    <div class="props" id="props">
